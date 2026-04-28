@@ -17,6 +17,7 @@ import { runPipeline, type PipelineAttachment } from "../pipeline/pipeline.js";
 import { mdToTelegramHtml, splitMessage } from "./format.js";
 import { describeToolCall } from "./tool-labels.js";
 import { convertToMarkdown, MarkItDownError } from "../extraction/markitdown.js";
+import { describeDocument, describeImage } from "../extraction/describe.js";
 import { payload, PayloadError } from "../payload/client.js";
 
 interface TgUser {
@@ -251,6 +252,7 @@ export class TelegramChannel {
       logger.info("Telegram", `Downloaded ${name} (${(dl.buffer.length / 1024).toFixed(1)}KB)`);
 
       // Upload Payload media (best-effort — không chặn flow nếu fail)
+      let mediaId: string | null = null;
       try {
         onStatus(`📤 Lưu tệp vào kho media...`);
         const media = await payload.uploadMedia({
@@ -259,6 +261,7 @@ export class TelegramChannel {
           mimeType: mime,
           alt: `Telegram chat ${msg.chat.id}`,
         });
+        mediaId = media.id;
         logger.info("Telegram", `Uploaded ${name} → media#${media.id}`);
       } catch (err) {
         const reason = err instanceof PayloadError ? err.message : String(err);
@@ -267,15 +270,41 @@ export class TelegramChannel {
       }
 
       // MarkItDown
+      let markdown: string | null = null;
       try {
         onStatus(`🔍 Đọc nội dung qua MarkItDown...`);
-        const markdown = await convertToMarkdown(dl.buffer, name);
+        markdown = await convertToMarkdown(dl.buffer, name);
         logger.info("Telegram", `MarkItDown ${name} → ${markdown.length} chars`);
         out.push({ type: "document", name, markdown });
       } catch (err) {
         const reason = err instanceof MarkItDownError ? err.message : String(err);
         logger.warn("Telegram", `MarkItDown failed: ${reason}`);
         onStatus(`⚠️ Không đọc được nội dung tệp (${reason})`);
+      }
+
+      // AI tóm tắt (background — không chặn flow): lưu kind + description
+      // + extractedText vào media doc để tra cứu sau này.
+      if (mediaId && markdown) {
+        const id = mediaId;
+        const md = markdown;
+        void describeDocument(name, md)
+          .then((d) =>
+            payload.request(`/api/media/${encodeURIComponent(id)}`, {
+              method: "PATCH",
+              body: {
+                kind: d.kind,
+                description: d.description,
+                extractedText: md.slice(0, 50_000),
+                uploadedFrom: "telegram",
+              },
+            }),
+          )
+          .then(() =>
+            logger.info("Telegram", `media#${id} described + saved (${name})`),
+          )
+          .catch((e) =>
+            logger.warn("Telegram", `describe/PATCH media#${id} failed: ${e}`),
+          );
       }
       return out;
     }
@@ -301,6 +330,7 @@ export class TelegramChannel {
                    ext === "gif" ? "image/gif" : "image/jpeg";
       const claudeMime = SUPPORTED_IMAGE_MIME[mime] ?? "image/jpeg";
 
+      let mediaId: string | null = null;
       try {
         onStatus(`📤 Lưu ảnh vào kho media...`);
         const media = await payload.uploadMedia({
@@ -309,6 +339,7 @@ export class TelegramChannel {
           mimeType: mime,
           alt: `Telegram chat ${msg.chat.id}`,
         });
+        mediaId = media.id;
         logger.info("Telegram", `Uploaded photo → media#${media.id}`);
       } catch (err) {
         const reason = err instanceof PayloadError ? err.message : String(err);
@@ -317,6 +348,30 @@ export class TelegramChannel {
       }
 
       out.push({ type: "image", name, mediaType: claudeMime, buffer: dl.buffer });
+
+      // AI tóm tắt ảnh (background) — Claude vision sinh kind + description
+      if (mediaId) {
+        const id = mediaId;
+        const buf = dl.buffer;
+        void describeImage(name, buf, claudeMime)
+          .then((d) =>
+            payload.request(`/api/media/${encodeURIComponent(id)}`, {
+              method: "PATCH",
+              body: {
+                kind: d.kind,
+                description: d.description,
+                uploadedFrom: "telegram",
+              },
+            }),
+          )
+          .then(() =>
+            logger.info("Telegram", `media#${id} described + saved (${name})`),
+          )
+          .catch((e) =>
+            logger.warn("Telegram", `describe/PATCH photo media#${id} failed: ${e}`),
+          );
+      }
+
       return out;
     }
 

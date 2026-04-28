@@ -54,7 +54,14 @@ Các đối tượng chính:
 User có thể gửi tệp/ảnh:
 - **Document (PDF/DOCX/XLSX)**: nội dung tự được trích thành markdown qua MarkItDown, inject vào tin nhắn dạng \`📎 Đính kèm: <tên>\\n--- BẮT ĐẦU NỘI DUNG ---\\n...\\n--- HẾT NỘI DUNG ---\`. Bạn cứ đọc text như đọc tài liệu — không cần tool.
 - **Ảnh**: gắn trực tiếp vào tin nhắn (vision). Nhìn được luôn.
-- File gốc đã lưu vào kho media của Payload.
+- File gốc đã lưu vào kho media của Payload, có \`description\` (bot tự tóm tắt nội dung) + \`kind\` (loại tài liệu) — ai sau này tìm bằng \`search_media\`.
+
+## Tra cứu file đã upload
+- \`search_media({q})\` — tìm trong description/filename/alt. Dùng khi user hỏi:
+  - "có ảnh chân dung của LD-001 chưa?" → \`search_media({q:"LD-001 chân dung", kind:"portrait"})\`
+  - "HĐ với Toyota tháng 3" → \`search_media({q:"Toyota hợp đồng", kind:"contract"})\`
+  - "đã có giấy khám SK chưa?" → \`search_media({q:"khám sức khoẻ", kind:"health_cert"})\`
+- \`get_media_content({id})\` — lấy text gốc đầy đủ của 1 doc khi description chưa đủ thông tin.
 
 Khi nhận tệp, hãy:
 1. Suy luận đó là gì (CV / hộ chiếu / giấy khám SK / HĐ / ảnh chân dung / tài liệu đối tác?)

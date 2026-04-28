@@ -9,6 +9,7 @@ import { orderWorkerTools } from "./order-workers.tools.js";
 import { contractTools } from "./contracts.tools.js";
 import { workflowStageTools } from "./workflow-stages.tools.js";
 import { formTools } from "./forms.tools.js";
+import { mediaTools } from "./media.tools.js";
 
 import { advanceOrderStatus } from "./orders.workflow.js";
 import { orderProgressSummary } from "./orders.summary.js";
@@ -24,6 +25,9 @@ export const allTools = [
 
   // Form builder integration.
   ...formTools,
+
+  // Media search by AI-generated description.
+  ...mediaTools,            // 2: search_media, get_media_content
 
   // Domain-specific.
   advanceOrderStatus,
