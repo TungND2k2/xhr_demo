@@ -21,6 +21,7 @@ interface MediaRow {
   alt?: string;
   kind?: string;
   description?: string;
+  extractedText?: string;
   mimeType?: string;
   filesize?: number;
   url?: string;
@@ -76,14 +77,27 @@ Trả top 10 kết quả với mô tả ngắn + URL.`,
   },
   async ({ q, kind, limit }) => {
     try {
-      const where: Record<string, unknown> = {
-        or: [
-          { description: { contains: q } },
-          { filename: { contains: q } },
-          { alt: { contains: q } },
-        ],
-      };
-      if (kind) where.kind = { equals: kind };
+      // Tách query thành nhiều từ để bắt được dù text trong file bị xuống dòng
+      // ("NGUYỄN THỊ\nHẰNG" sẽ không match exact "Nguyễn Thị Hằng" — match từng từ).
+      const tokens = q
+        .split(/\s+/)
+        .map((t) => t.trim())
+        .filter((t) => t.length >= 2);
+
+      const buildOr = (term: string) => [
+        { description: { contains: term } },
+        { extractedText: { contains: term } },
+        { filename: { contains: term } },
+        { alt: { contains: term } },
+      ];
+
+      const where: Record<string, unknown> = tokens.length > 1
+        ? { and: tokens.map((t) => ({ or: buildOr(t) })) }
+        : { or: buildOr(q) };
+
+      if (kind) (where as { and?: unknown[]; or?: unknown[] }).and
+        ? ((where as { and: unknown[] }).and.push({ kind: { equals: kind } }))
+        : (where.kind = { equals: kind });
 
       const res = await payload.request<{ docs: MediaRow[]; totalDocs: number }>(
         "/api/media",
@@ -164,4 +178,59 @@ document, ảnh thì trả về description.`,
   },
 );
 
-export const mediaTools = [searchMedia, getMediaContent];
+export const redescribeMedia = tool(
+  "redescribe_media",
+  `Tóm tắt lại 1 file đã upload (chạy lại LLM describe). Dùng khi
+description hiện tại là fallback/lỗi/quá cũ, hoặc user nói "đọc lại file X".
+Sẽ gọi LLM extract entity từ extractedText (nếu có) → PATCH lại description + kind.`,
+  {
+    id: z.string().describe("ID media doc"),
+  },
+  async ({ id }) => {
+    try {
+      const m = await payload.request<MediaRow>(
+        `/api/media/${encodeURIComponent(id)}`,
+      );
+      if (!m.extractedText) {
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: `⚠️ Media #${id} không có extractedText (ảnh hoặc PDF không trích được text). Không tóm tắt lại được.`,
+            },
+          ],
+          isError: true,
+        };
+      }
+
+      // Lazy import để không gây dependency cycle (describe → query → tools/factory).
+      const { describeDocument } = await import("../extraction/describe.js");
+      const d = await describeDocument(m.filename, m.extractedText);
+
+      await payload.request(`/api/media/${encodeURIComponent(id)}`, {
+        method: "PATCH",
+        body: { kind: d.kind, description: d.description },
+      });
+
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text:
+              `✅ Đã tóm tắt lại file #${id} (${m.filename})\n\n` +
+              `Loại: ${d.kind}\n` +
+              `Mô tả mới:\n${d.description}`,
+          },
+        ],
+      };
+    } catch (err) {
+      const msg = err instanceof PayloadError ? err.message : String(err);
+      return {
+        content: [{ type: "text" as const, text: `⚠️ ${msg}` }],
+        isError: true,
+      };
+    }
+  },
+);
+
+export const mediaTools = [searchMedia, getMediaContent, redescribeMedia];

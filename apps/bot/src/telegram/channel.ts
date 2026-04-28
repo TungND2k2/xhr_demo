@@ -282,29 +282,58 @@ export class TelegramChannel {
         onStatus(`⚠️ Không đọc được nội dung tệp (${reason})`);
       }
 
-      // AI tóm tắt (background — không chặn flow): lưu kind + description
-      // + extractedText vào media doc để tra cứu sau này.
-      if (mediaId && markdown) {
+      // Background tasks — không chặn pipeline trả lời user.
+      if (mediaId) {
         const id = mediaId;
-        const md = markdown;
-        void describeDocument(name, md)
-          .then((d) =>
-            payload.request(`/api/media/${encodeURIComponent(id)}`, {
+        const md = markdown ?? "";
+
+        // Step 1: luôn PATCH metadata cơ bản (uploadedFrom + extractedText)
+        // dù describe có thành công hay không.
+        void payload
+          .request(`/api/media/${encodeURIComponent(id)}`, {
+            method: "PATCH",
+            body: {
+              uploadedFrom: "telegram",
+              extractedText: md.slice(0, 50_000),
+            },
+          })
+          .catch((e) =>
+            logger.warn("Telegram", `metadata PATCH media#${id} failed: ${e}`),
+          );
+
+        // Step 2: nếu có content thì describe, không thì gắn kind="other"
+        // và description chung dựa filename.
+        if (md.trim().length > 50) {
+          void describeDocument(name, md)
+            .then((d) =>
+              payload.request(`/api/media/${encodeURIComponent(id)}`, {
+                method: "PATCH",
+                body: { kind: d.kind, description: d.description },
+              }),
+            )
+            .then(() =>
+              logger.info("Telegram", `media#${id} described + saved (${name})`),
+            )
+            .catch((e) =>
+              logger.warn("Telegram", `describe/PATCH media#${id} failed: ${e}`),
+            );
+        } else {
+          logger.warn(
+            "Telegram",
+            `MarkItDown returned empty for ${name} (likely scanned PDF) — skipped describe`,
+          );
+          void payload
+            .request(`/api/media/${encodeURIComponent(id)}`, {
               method: "PATCH",
               body: {
-                kind: d.kind,
-                description: d.description,
-                extractedText: md.slice(0, 50_000),
-                uploadedFrom: "telegram",
+                kind: "other",
+                description:
+                  `Không trích được text từ ${name} (có thể là PDF scan/ảnh). ` +
+                  `Cần OCR riêng hoặc gửi lại dưới dạng ảnh để Claude vision đọc.`,
               },
-            }),
-          )
-          .then(() =>
-            logger.info("Telegram", `media#${id} described + saved (${name})`),
-          )
-          .catch((e) =>
-            logger.warn("Telegram", `describe/PATCH media#${id} failed: ${e}`),
-          );
+            })
+            .catch(() => {});
+        }
       }
       return out;
     }
