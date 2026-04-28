@@ -86,7 +86,6 @@ export const Media: CollectionConfig = {
         description:
           "Output thô của MarkItDown. Chỉ có với document; ảnh thì để trống.",
         readOnly: true,
-        initCollapsed: true,
       },
     },
     {
