@@ -1,0 +1,36 @@
+/* ─────────────────────────────────────────────────────────────
+   SkillBot — Payload admin theme override (MINIMAL)
+
+   QUAN TRỌNG: chỉ chỉnh brand color + font.
+   KHÔNG override layout / padding / size / border-radius
+   — Payload's default lo những thứ đó.
+   ───────────────────────────────────────────────────────────── */
+
+@layer payload-default {
+  :root {
+    /* Brand emerald — đổi success-500 (Payload dùng cho primary action) */
+    --theme-success-50:  238 246 240;
+    --theme-success-100: 215 234 220;
+    --theme-success-150: 187 219 197;
+    --theme-success-250: 132 191 152;
+    --theme-success-350: 74 156 109;
+    --theme-success-450: 22 122 79;
+    --theme-success-500: 16 185 129;
+    --theme-success-650: 6 78 59;
+    --theme-success-750: 4 47 36;
+    --theme-success-850: 2 24 19;
+    --theme-success-950: 0 12 9;
+  }
+}
+
+body {
+  font-family:
+    "Inter",
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    "Roboto",
+    "Helvetica Neue",
+    Arial,
+    sans-serif;
+}
