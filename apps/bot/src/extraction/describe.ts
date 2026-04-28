@@ -56,6 +56,34 @@ function stripJsonFences(raw: string): string {
   return raw.trim().replace(/^\`\`\`(?:json)?\s*/i, "").replace(/\s*\`\`\`$/i, "").trim();
 }
 
+/**
+ * Tìm JSON object trong text. Claude đôi khi trả natural language wrap quanh
+ * JSON — ta tìm `{...}` cân đối braces. Trả null nếu không có.
+ */
+function findFirstJsonBlock(raw: string): string | null {
+  const stripped = stripJsonFences(raw);
+  if (stripped.startsWith("{")) return stripped;
+  // Find first '{' then walk to balanced '}'
+  const start = stripped.indexOf("{");
+  if (start < 0) return null;
+  let depth = 0;
+  let inStr = false;
+  let escape = false;
+  for (let i = start; i < stripped.length; i += 1) {
+    const c = stripped[i];
+    if (escape) { escape = false; continue; }
+    if (c === "\\") { escape = true; continue; }
+    if (c === '"') { inStr = !inStr; continue; }
+    if (inStr) continue;
+    if (c === "{") depth += 1;
+    else if (c === "}") {
+      depth -= 1;
+      if (depth === 0) return stripped.slice(start, i + 1);
+    }
+  }
+  return null;
+}
+
 async function runQuery(
   prompt: string | AsyncIterable<SDKUserMessage>,
   tag: string,
@@ -98,14 +126,33 @@ const FALLBACK: FileDescription = {
   description: "Không tóm tắt được nội dung — bot lỗi khi gọi LLM.",
 };
 
-function parse(raw: string): FileDescription {
+function parse(raw: string, tag: string): FileDescription {
+  // Log raw output (cap 800 chars) để debug khi parse fail.
+  logger.debug("Describe", `${tag} raw output: ${raw.slice(0, 800)}`);
+  const block = findFirstJsonBlock(raw);
+  if (!block) {
+    logger.warn(
+      "Describe",
+      `${tag} no JSON block found in output (first 200 chars): ${raw.slice(0, 200)}`,
+    );
+    // Fallback: dùng raw text làm description (tốt hơn fallback "lỗi LLM")
+    const cleaned = raw.trim().slice(0, 800);
+    if (cleaned.length > 30) {
+      return { kind: "other", description: cleaned };
+    }
+    return FALLBACK;
+  }
   try {
-    const obj = JSON.parse(stripJsonFences(raw)) as Partial<FileDescription>;
+    const obj = JSON.parse(block) as Partial<FileDescription>;
     const kind = (obj.kind ?? "other") as MediaKind;
     const description = (obj.description ?? "").trim();
-    if (!description) return FALLBACK;
+    if (!description) {
+      logger.warn("Describe", `${tag} parsed JSON but description empty: ${block.slice(0, 200)}`);
+      return FALLBACK;
+    }
     return { kind, description };
-  } catch {
+  } catch (err) {
+    logger.warn("Describe", `${tag} JSON parse error: ${err}; block: ${block.slice(0, 200)}`);
     return FALLBACK;
   }
 }
@@ -131,7 +178,7 @@ ${truncated}
 ---`;
   try {
     const raw = await runQuery(prompt, `doc:${fileName}`);
-    return parse(raw);
+    return parse(raw, `doc:${fileName}`);
   } catch (err) {
     logger.warn("Describe", `doc ${fileName} failed: ${err}`);
     return FALLBACK;
@@ -171,7 +218,7 @@ export async function describeImage(
 
   try {
     const raw = await runQuery(messages(), `img:${fileName}`);
-    return parse(raw);
+    return parse(raw, `img:${fileName}`);
   } catch (err) {
     logger.warn("Describe", `img ${fileName} failed: ${err}`);
     return FALLBACK;
