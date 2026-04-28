@@ -52,7 +52,20 @@ export async function convertToMarkdown(
     throw new MarkItDownError(res.status, `MarkItDown ${res.status}: ${body.slice(0, 200)}`);
   }
 
-  const text = await res.text();
-  logger.debug("MarkItDown", `Converted ${fileName} → ${text.length} chars`);
+  const raw = await res.text();
+  // Service trả JSON `{"content":"...","title":"..."}` (bản fork phổ biến)
+  // hoặc raw markdown text. Auto-detect bằng content-type + thử parse.
+  const ct = res.headers.get("content-type") ?? "";
+  let text = raw;
+  if (ct.includes("application/json") || raw.trimStart().startsWith("{")) {
+    try {
+      const obj = JSON.parse(raw) as { content?: string; markdown?: string; text?: string };
+      const extracted = obj.content ?? obj.markdown ?? obj.text;
+      if (typeof extracted === "string") text = extracted;
+    } catch {
+      // Không phải JSON hợp lệ — giữ raw
+    }
+  }
+  logger.debug("MarkItDown", `Converted ${fileName} → ${text.length} chars (ct=${ct})`);
   return text;
 }
