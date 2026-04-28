@@ -70,7 +70,7 @@ async function runQuery(
       mcpServers: {},
       permissionMode: "bypassPermissions",
       allowDangerouslySkipPermissions: true,
-      maxTurns: 1,
+      maxTurns: 5,
       model: cfg.CLAUDE_MODEL,
       persistSession: false,
       ...(cfg.CLAUDE_BIN ? { pathToClaudeCodeExecutable: cfg.CLAUDE_BIN } : {}),
