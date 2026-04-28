@@ -91,6 +91,14 @@ export class TelegramChannel {
   private pollDelay = 1000;
   private readonly queue: MessageQueue;
 
+  /** Per-chatId conversation history — last MAX_HISTORY items rolling window.
+   *  In-memory; mất khi bot restart (chấp nhận được — user chat lại context). */
+  private readonly chatHistory = new Map<
+    number,
+    Array<{ role: "user" | "assistant"; text: string; attachmentNote?: string }>
+  >();
+  private readonly MAX_HISTORY = 12;
+
   constructor(
     private readonly botToken: string,
     private readonly config: Config,
@@ -250,6 +258,51 @@ export class TelegramChannel {
         return out;
       }
       logger.info("Telegram", `Downloaded ${name} (${(dl.buffer.length / 1024).toFixed(1)}KB)`);
+
+      // Nếu document thực ra là ảnh (PNG/JPG) → đẩy qua nhánh vision
+      // (MarkItDown sẽ trả 0 chars vì không OCR mặc định, AI cần "nhìn" ảnh).
+      if (mime.startsWith("image/")) {
+        const claudeMime = SUPPORTED_IMAGE_MIME[mime] ?? "image/jpeg";
+        let mediaId: string | null = null;
+        try {
+          onStatus(`📤 Lưu ảnh vào kho media...`);
+          const media = await payload.uploadMedia({
+            buffer: dl.buffer,
+            filename: name,
+            mimeType: mime,
+            alt: `Telegram chat ${msg.chat.id}`,
+          });
+          mediaId = media.id;
+          logger.info("Telegram", `Uploaded image-doc → media#${media.id}`);
+        } catch (err) {
+          const reason = err instanceof PayloadError ? err.message : String(err);
+          onStatus(`⚠️ Lưu media thất bại (${reason}) — vẫn gửi AI xem ảnh`);
+        }
+        out.push({ type: "image", name, mediaType: claudeMime, buffer: dl.buffer });
+
+        if (mediaId) {
+          const id = mediaId;
+          const buf = dl.buffer;
+          void describeImage(name, buf, claudeMime)
+            .then((descRes) =>
+              payload.request(`/api/media/${encodeURIComponent(id)}`, {
+                method: "PATCH",
+                body: {
+                  uploadedFrom: "telegram",
+                  kind: descRes.kind,
+                  description: descRes.description,
+                },
+              }),
+            )
+            .then(() =>
+              logger.info("Telegram", `media#${id} described (image-doc, ${name})`),
+            )
+            .catch((e) =>
+              logger.warn("Telegram", `describe/PATCH image-doc media#${id} failed: ${e}`),
+            );
+        }
+        return out;
+      }
 
       // Upload Payload media (best-effort — không chặn flow nếu fail)
       let mediaId: string | null = null;
@@ -412,6 +465,16 @@ export class TelegramChannel {
     text: string,
     msg: TgMessage,
   ): Promise<void> {
+    // Quick commands — không qua pipeline.
+    if (text === "/reset" || text === "/clear") {
+      this.clearChatHistory(chatId);
+      await this.sendMessage(
+        chatId,
+        "🧹 Đã xoá lịch sử trò chuyện. Bắt đầu lại từ đầu nhé.",
+      );
+      return;
+    }
+
     const summary = text
       ? `text "${text.slice(0, 80)}"`
       : msg.document
@@ -469,9 +532,18 @@ export class TelegramChannel {
     };
     const attachments = await this.resolveAttachments(msg, onStatus);
 
+    // Build attachmentNote cho lịch sử (để turn sau AI biết user trước đã gửi gì)
+    const attachmentNote = attachments
+      .map((a) => `${a.type === "image" ? "🖼" : "📄"} ${a.name}`)
+      .join(", ");
+
+    // Lấy history của chat này
+    const history = this.chatHistory.get(chatId) ?? [];
+
     const result = await runPipeline({
       message: text,
       attachments,
+      priorMessages: history,
       onToolCall: (name, args) => {
         const label = describeToolCall(name, args);
         activityLog.push(label);
@@ -486,9 +558,27 @@ export class TelegramChannel {
       },
     });
 
+    // Cập nhật history ring-buffer cho chat này
+    history.push({
+      role: "user",
+      text: text || "(file đính kèm)",
+      attachmentNote: attachmentNote || undefined,
+    });
+    history.push({ role: "assistant", text: result.reply });
+    if (history.length > this.MAX_HISTORY) {
+      history.splice(0, history.length - this.MAX_HISTORY);
+    }
+    this.chatHistory.set(chatId, history);
+
     if (pendingEdit) clearTimeout(pendingEdit);
     if (statusMsgId !== null) await this.deleteMessage(chatId, statusMsgId);
     await this.sendMessage(chatId, result.reply);
+  }
+
+  /** Cho user clear context khi cần (vd: /reset). Không expose qua Telegram
+   *  command yet — chỉ programmatic. */
+  clearChatHistory(chatId: number): void {
+    this.chatHistory.delete(chatId);
   }
 
   private async sendPlainMessage(chatId: number, text: string): Promise<number | null> {
