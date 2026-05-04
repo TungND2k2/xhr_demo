@@ -18,6 +18,7 @@ import { mdToTelegramHtml, splitMessage } from "./format.js";
 import { describeToolCall } from "./tool-labels.js";
 import { convertToMarkdown, MarkItDownError } from "../extraction/markitdown.js";
 import { describeDocument, describeImage } from "../extraction/describe.js";
+import { pdfToImages, PdfToImagesError } from "../extraction/pdf-to-images.js";
 import { payload, PayloadError } from "../payload/client.js";
 
 interface TgUser {
@@ -454,13 +455,38 @@ export class TelegramChannel {
         onStatus(`⚠️ Lưu media thất bại (${reason}) — vẫn tiếp tục đọc nội dung`);
       }
 
-      // MarkItDown
+      // MarkItDown — extract text from document. Nếu PDF scan (không có
+      // text layer) thì sẽ trả empty → fallback OCR qua Claude vision bằng
+      // cách convert PDF pages → PNG → push như image attachment.
       let markdown: string | null = null;
+      let pdfFallbackPages = 0;
       try {
         onStatus(`🔍 Đọc nội dung qua MarkItDown...`);
         markdown = await convertToMarkdown(dl.buffer, name);
         logger.info("Telegram", `MarkItDown ${name} → ${markdown.length} chars`);
-        out.push({ type: "document", name, markdown });
+
+        if (markdown.trim().length < 50 && mime === "application/pdf") {
+          onStatus(`👁 PDF không có text — OCR qua Claude vision...`);
+          try {
+            const pages = await pdfToImages(dl.buffer, { maxPages: 5, dpi: 150 });
+            pdfFallbackPages = pages.length;
+            for (const pg of pages) {
+              out.push({
+                type: "image",
+                name: `${name} (trang ${pg.page})`,
+                mediaType: "image/png",
+                buffer: pg.buffer,
+              });
+            }
+            onStatus(`✓ Đã chuyển ${pages.length} trang PDF thành ảnh để AI đọc`);
+          } catch (err) {
+            const reason = err instanceof PdfToImagesError ? err.message : String(err);
+            logger.warn("Telegram", `pdf-to-images failed: ${reason}`);
+            onStatus(`⚠️ Không OCR được (${reason})`);
+          }
+        } else {
+          out.push({ type: "document", name, markdown });
+        }
       } catch (err) {
         const reason = err instanceof MarkItDownError ? err.message : String(err);
         logger.warn("Telegram", `MarkItDown failed: ${reason}`);
@@ -502,6 +528,25 @@ export class TelegramChannel {
             .catch((e) =>
               logger.warn("Telegram", `describe/PATCH media#${id} failed: ${e}`),
             );
+        } else if (pdfFallbackPages > 0) {
+          // PDF scan đã được OCR qua Claude vision (push pages ở pipeline).
+          // Trigger describeDocument với text rỗng có thể không hữu ích;
+          // chỉ ghi nhận trong description rằng file đã được vision đọc.
+          logger.info(
+            "Telegram",
+            `${name}: MarkItDown empty nhưng đã fallback ${pdfFallbackPages} trang qua vision`,
+          );
+          void payload
+            .request(`/api/media/${encodeURIComponent(id)}`, {
+              method: "PATCH",
+              body: {
+                kind: "other",
+                description:
+                  `${name} là PDF scan (${pdfFallbackPages} trang đầu). ` +
+                  `MarkItDown không trích được text; bot đã chuyển sang ảnh và gửi Claude vision OCR.`,
+              },
+            })
+            .catch(() => {});
         } else {
           logger.warn(
             "Telegram",
