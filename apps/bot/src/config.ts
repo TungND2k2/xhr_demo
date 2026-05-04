@@ -25,7 +25,7 @@ const ConfigSchema = z.object({
   // Queue
   QUEUE_CONCURRENCY: z.coerce.number().default(5),
   QUEUE_MAX_SIZE: z.coerce.number().default(100),
-  QUEUE_JOB_TIMEOUT_MS: z.coerce.number().default(200_000),
+  QUEUE_JOB_TIMEOUT_MS: z.coerce.number().default(660_000),
 
   // Pipeline
   MAX_TOOL_LOOPS: z.coerce.number().default(10),
