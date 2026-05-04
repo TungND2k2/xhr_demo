@@ -64,8 +64,11 @@ export interface PipelineOutput {
   toolsUsed: string[];
 }
 
-/** Hard timeout (ms) — nếu Claude treo, thoát ra để log lỗi rõ. */
-const PIPELINE_TIMEOUT_MS = 90_000;
+/** Hard timeout (ms) — nếu Claude treo, thoát ra để log lỗi rõ.
+ *  Nâng lên 180s vì vision đọc PDF scan 4-5 trang + multi-tool flow
+ *  (search_media → list_orders → create_orders → get_orders) thường
+ *  chạm 70-90s. 180s cho buffer thoải mái. */
+const PIPELINE_TIMEOUT_MS = 180_000;
 
 function preview(s: string, n = 80): string {
   const compact = s.replace(/\s+/g, " ").trim();
