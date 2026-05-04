@@ -22,6 +22,7 @@ import { payload, PayloadError } from "../payload/client.js";
 
 interface TgUser {
   id: number;
+  is_bot?: boolean;
   first_name: string;
   last_name?: string;
   username?: string;
@@ -40,14 +41,23 @@ interface TgPhotoSize {
   width: number;
   height: number;
 }
+interface TgMessageEntity {
+  type: string;
+  offset: number;
+  length: number;
+  user?: TgUser;
+}
 interface TgMessage {
   message_id: number;
   from?: TgUser;
-  chat: { id: number; type: string };
+  chat: { id: number; type: string; title?: string };
   text?: string;
   caption?: string;
+  entities?: TgMessageEntity[];
+  caption_entities?: TgMessageEntity[];
   document?: TgDocument;
   photo?: TgPhotoSize[];
+  reply_to_message?: TgMessage;
   date: number;
 }
 interface TgUpdate { update_id: number; message?: TgMessage }
@@ -91,6 +101,11 @@ export class TelegramChannel {
   private pollDelay = 1000;
   private readonly queue: MessageQueue;
 
+  /** Bot identity từ getMe() — dùng để detect mention / reply / command suffix
+   *  trong group. Lazy-load lần đầu cần đến nếu chưa có. */
+  private botId: number | null = null;
+  private botUsername: string | null = null;
+
   /** Per-chatId conversation history — last MAX_HISTORY items rolling window.
    *  In-memory; mất khi bot restart (chấp nhận được — user chat lại context). */
   private readonly chatHistory = new Map<
@@ -113,8 +128,34 @@ export class TelegramChannel {
   start(): void {
     if (this.polling) return;
     this.polling = true;
+    void this.fetchBotIdentity();
     this.poll();
     logger.info("Telegram", "Polling started");
+  }
+
+  /** Lấy bot id + username từ getMe(). Gọi 1 lần lúc start; nếu fail
+   *  thì lazy-retry ở fetchUpdates (group filter cần thông tin này). */
+  private async fetchBotIdentity(): Promise<void> {
+    if (this.botId !== null) return;
+    try {
+      const res = await fetch(`${this.apiBase}/getMe`, {
+        signal: AbortSignal.timeout(15_000),
+      });
+      const data = (await res.json()) as {
+        ok: boolean;
+        result?: { id: number; username?: string };
+      };
+      if (data.ok && data.result) {
+        this.botId = data.result.id;
+        this.botUsername = data.result.username ?? null;
+        logger.info(
+          "Telegram",
+          `Identity: @${this.botUsername ?? "?"} (id=${this.botId})`,
+        );
+      }
+    } catch (e) {
+      logger.warn("Telegram", `getMe failed: ${e}`);
+    }
   }
 
   stop(): void {
@@ -180,16 +221,102 @@ export class TelegramChannel {
     for (const update of data.result) {
       this.offset = update.update_id + 1;
       const msg = update.message;
-      if (!msg || msg.chat.type !== "private") continue;
+      if (!msg) continue;
+
+      const chatType = msg.chat.type;
+      if (chatType !== "private" && chatType !== "group" && chatType !== "supergroup") {
+        continue; // channel posts, etc — bỏ qua
+      }
+
       const hasContent = !!(msg.text || msg.caption || msg.document || msg.photo);
-      if (hasContent) this.handleMessage(msg);
+      if (!hasContent) continue;
+
+      if (chatType === "private") {
+        this.handleMessage(msg, /*strippedText*/ undefined);
+        continue;
+      }
+
+      // Group / supergroup: chỉ trả lời khi được gọi tên.
+      // Nếu chưa biết bot identity thì retry getMe() đồng bộ — Privacy Mode
+      // bật nên updates đã được Telegram lọc, nhưng vẫn cần username để strip.
+      if (this.botId === null) await this.fetchBotIdentity();
+
+      const addressed = this.parseGroupAddress(msg);
+      if (!addressed.match) continue;
+      this.handleMessage(msg, addressed.cleanedText);
     }
   }
 
-  private handleMessage(msg: TgMessage): void {
+  /**
+   * Trong group, bot CHỈ trả lời khi:
+   *  - là /command (có hoặc không kèm @username)
+   *  - text/caption có @mention bot (entity type "mention" hoặc "text_mention")
+   *  - reply trực tiếp vào message của bot
+   * Trả về text đã strip @YourBot / @YourBot trong /cmd@YourBot để pipeline
+   * không thấy nhiễu.
+   */
+  private parseGroupAddress(msg: TgMessage): { match: boolean; cleanedText: string } {
+    const raw = msg.text ?? msg.caption ?? "";
+    const entities = msg.entities ?? msg.caption_entities ?? [];
+    const username = this.botUsername;
+    const botId = this.botId;
+
+    let match = false;
+
+    // Reply tới message của bot
+    if (msg.reply_to_message?.from?.id && botId && msg.reply_to_message.from.id === botId) {
+      match = true;
+    }
+
+    // Mention qua entities (chính xác hơn substring matching)
+    if (!match && username) {
+      const usernameLower = username.toLowerCase();
+      for (const ent of entities) {
+        if (ent.type === "mention") {
+          const mention = raw.slice(ent.offset, ent.offset + ent.length); // "@username"
+          if (mention.slice(1).toLowerCase() === usernameLower) {
+            match = true;
+            break;
+          }
+        } else if (ent.type === "text_mention" && ent.user?.id === botId) {
+          match = true;
+          break;
+        }
+      }
+    }
+
+    // Command: "/cmd" hoặc "/cmd@YourBot"
+    let isCommand = false;
+    if (entities.length > 0 && entities[0].type === "bot_command" && entities[0].offset === 0) {
+      const cmd = raw.slice(0, entities[0].length); // "/cmd" hoặc "/cmd@YourBot"
+      const at = cmd.indexOf("@");
+      if (at === -1) {
+        // /cmd không kèm username: hợp lệ trong private, group thì chấp nhận
+        // (Privacy Mode bật vẫn cho qua command). Coi như addressed.
+        isCommand = true;
+      } else if (username && cmd.slice(at + 1).toLowerCase() === username.toLowerCase()) {
+        isCommand = true;
+      }
+    }
+    if (isCommand) match = true;
+
+    if (!match) return { match: false, cleanedText: raw };
+
+    // Strip @username khỏi text để pipeline không thấy "@YourBot"
+    let cleaned = raw;
+    if (username) {
+      const re = new RegExp(`@${username}\\b`, "gi");
+      cleaned = cleaned.replace(re, "").replace(/\s{2,}/g, " ").trim();
+    } else {
+      cleaned = cleaned.trim();
+    }
+    return { match: true, cleanedText: cleaned };
+  }
+
+  private handleMessage(msg: TgMessage, overrideText?: string): void {
     if (!msg.from) return;
     const chatId = msg.chat.id;
-    const text = (msg.text ?? msg.caption ?? "").trim();
+    const text = (overrideText ?? msg.text ?? msg.caption ?? "").trim();
 
     const job: QueueJob = {
       id: newId(),
