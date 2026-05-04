@@ -1,14 +1,14 @@
 /* ─────────────────────────────────────────────────────────────
-   SkillBot — Payload admin theme override (MINIMAL)
+   xHR — Payload admin theme override
 
-   QUAN TRỌNG: chỉ chỉnh brand color + font.
-   KHÔNG override layout / padding / size / border-radius
-   — Payload's default lo những thứ đó.
+   Palette: emerald (Petite Étoile / xHR brand)
+   Font:    Inter (system fallback)
+   Tweaks:  softer shadows, rounder corners, clearer hierarchy
    ───────────────────────────────────────────────────────────── */
 
 @layer payload-default {
   :root {
-    /* Brand emerald — đổi success-500 (Payload dùng cho primary action) */
+    /* Brand emerald — Payload dùng "success" cho primary action (nút Save, link active) */
     --theme-success-50:  238 246 240;
     --theme-success-100: 215 234 220;
     --theme-success-150: 187 219 197;
@@ -20,9 +20,15 @@
     --theme-success-750: 4 47 36;
     --theme-success-850: 2 24 19;
     --theme-success-950: 0 12 9;
+
+    /* Tăng radius nhẹ — input/button mềm mắt hơn */
+    --style-radius-s: 6px;
+    --style-radius-m: 10px;
+    --style-radius-l: 14px;
   }
 }
 
+/* Font stack — Inter ưu tiên, fallback system */
 body {
   font-family:
     "Inter",
@@ -33,4 +39,210 @@ body {
     "Helvetica Neue",
     Arial,
     sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ── Tăng kích thước font cơ bản cho dễ đọc ────────────────── */
+.field-label,
+.field-description,
+label {
+  font-size: 13.5px;
+  letter-spacing: -0.005em;
+}
+
+/* ── Sidebar: nhóm collection rõ ràng hơn ─────────────────── */
+.nav__wrap {
+  padding-block: 4px;
+}
+
+.nav-group__label {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 11px;
+  font-weight: 700;
+  opacity: 0.55;
+  margin-block: 12px 6px;
+  padding-inline: 12px;
+}
+
+.nav__link {
+  border-radius: 8px;
+  margin-inline: 6px;
+  padding-block: 9px;
+  font-weight: 500;
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease;
+
+  &:hover {
+    background: rgb(var(--theme-elevation-100));
+  }
+}
+
+.nav__link--active {
+  background: rgb(var(--theme-success-50));
+  color: rgb(var(--theme-success-500));
+  font-weight: 600;
+}
+
+/* ── Table list: hàng cao hơn, hover rõ ──────────────────── */
+.table {
+  thead th {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    font-weight: 700;
+    opacity: 0.65;
+  }
+  tbody tr {
+    transition: background-color 0.12s ease;
+    &:hover {
+      background: rgb(var(--theme-elevation-50));
+    }
+  }
+  tbody td {
+    padding-block: 14px;
+  }
+}
+
+/* ── Input field: rounder, subtle border ─────────────────── */
+.field-type input[type="text"],
+.field-type input[type="email"],
+.field-type input[type="password"],
+.field-type input[type="number"],
+.field-type input[type="date"],
+.field-type textarea,
+.react-select__control {
+  border-radius: 8px;
+  border-color: rgb(var(--theme-elevation-150));
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+
+  &:focus,
+  &:focus-within {
+    border-color: rgb(var(--theme-success-500));
+    box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.15);
+  }
+}
+
+/* ── Button: gradient nhẹ cho primary (Save/Create) ──────── */
+.btn--style-primary {
+  background: linear-gradient(135deg, rgb(16, 185, 129) 0%, rgb(5, 150, 105) 100%);
+  border: none;
+  border-radius: 8px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  box-shadow: 0 1px 3px rgba(16, 185, 129, 0.25);
+  transition: transform 0.1s ease, box-shadow 0.15s ease;
+
+  &:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(16, 185, 129, 0.35);
+  }
+  &:active {
+    transform: translateY(0);
+  }
+}
+
+.btn--style-secondary {
+  border-radius: 8px;
+  border-color: rgb(var(--theme-elevation-200));
+  font-weight: 500;
+}
+
+/* ── Group / Collapsible: card mềm ───────────────────────── */
+.field-type.group .group__content,
+.collapsible__content {
+  border: 1px solid rgb(var(--theme-elevation-100));
+  border-radius: 12px;
+  background: rgb(var(--theme-elevation-0));
+  padding: 18px;
+}
+
+.collapsible__toggle-wrap {
+  border-radius: 10px;
+  font-weight: 600;
+}
+
+/* ── Tabs: pill style ────────────────────────────────────── */
+.tabs-field__tabs {
+  gap: 4px;
+  padding: 4px;
+  background: rgb(var(--theme-elevation-50));
+  border-radius: 12px;
+}
+
+.tabs-field__tab-button {
+  border-radius: 8px;
+  padding: 8px 16px;
+  font-weight: 500;
+  transition: background-color 0.15s ease, color 0.15s ease;
+
+  &:hover {
+    background: rgb(var(--theme-elevation-100));
+  }
+}
+
+.tabs-field__tab-button--active {
+  background: rgb(var(--theme-elevation-0));
+  color: rgb(var(--theme-success-500));
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+}
+
+/* ── Document header: gọn hơn ────────────────────────────── */
+.doc-header h1,
+.doc-header__title {
+  letter-spacing: -0.02em;
+  font-weight: 700;
+}
+
+/* ── Card view (collection landing): bo mạnh, hover lift ── */
+.collection-cards__card {
+  border-radius: 14px;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+
+  &:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+  }
+}
+
+/* ── Status pill (workflow status, role badge) ──────────── */
+.pill {
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  border-radius: 999px;
+}
+
+/* ── Date picker: less cramped ───────────────────────────── */
+.date-time-picker__input-wrapper {
+  border-radius: 8px;
+}
+
+/* ── Login page: center card more polished ──────────────── */
+.template-default__wrap--login,
+.login__form-wrap {
+  .form {
+    border: 1px solid rgb(var(--theme-elevation-100));
+    border-radius: 16px;
+    box-shadow: 0 12px 40px rgba(16, 185, 129, 0.08);
+    padding: 28px 24px;
+  }
+}
+
+/* ── Scrollbar mềm ──────────────────────────────────────── */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: rgb(var(--theme-elevation-200));
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+
+  &:hover {
+    background: rgb(var(--theme-elevation-300));
+    background-clip: padding-box;
+  }
 }

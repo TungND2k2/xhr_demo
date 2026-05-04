@@ -4,6 +4,8 @@ import { buildConfig } from "payload";
 import { mongooseAdapter } from "@payloadcms/db-mongodb";
 import { lexicalEditor } from "@payloadcms/richtext-lexical";
 import { formBuilderPlugin } from "@payloadcms/plugin-form-builder";
+import { vi } from "@payloadcms/translations/languages/vi";
+import { en } from "@payloadcms/translations/languages/en";
 import sharp from "sharp";
 
 import { Users } from "./collections/Users";
@@ -20,6 +22,10 @@ const filename = fileURLToPath(import.meta.url);
 const dirname = path.dirname(filename);
 
 export default buildConfig({
+  i18n: {
+    fallbackLanguage: "vi",
+    supportedLanguages: { vi, en },
+  },
   admin: {
     user: "users",
     meta: {
@@ -36,6 +42,7 @@ export default buildConfig({
         Logo: "/components/admin/Logo",
       },
     },
+    // Custom CSS — load qua app/(payload)/custom.scss đã wire trong layout
   },
   collections: [
     Users,
