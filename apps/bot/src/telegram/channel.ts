@@ -717,6 +717,27 @@ export class TelegramChannel {
     // Lấy history của chat này
     const history = this.chatHistory.get(chatId) ?? [];
 
+    // Heartbeat khi pipeline đang chạy — Claude vision/reasoning có thể mất
+    // 10-30s trước khi emit tool/text đầu tiên. Update line cuối với elapsed
+    // time để user biết bot không treo.
+    activityLog.push("💭 AI đang đọc và phân tích...");
+    queueEdit();
+    const pipelineStartedAt = Date.now();
+    const heartbeat = setInterval(() => {
+      const sec = Math.round((Date.now() - pipelineStartedAt) / 1000);
+      const last = activityLog[activityLog.length - 1] ?? "";
+      // Chỉ update nếu line cuối vẫn là dòng "đang đọc" — tránh đè lên
+      // tool call hoặc thinking line đã được pipeline emit.
+      if (last.startsWith("💭 AI đang đọc và phân tích")) {
+        activityLog[activityLog.length - 1] = `💭 AI đang đọc và phân tích... (${sec}s)`;
+        refreshTyping();
+        queueEdit();
+      } else {
+        // Pipeline đã có hoạt động → chỉ giữ typing indicator nhấp nháy
+        refreshTyping();
+      }
+    }, 5_000);
+
     const result = await runPipeline({
       message: text,
       attachments,
@@ -734,6 +755,7 @@ export class TelegramChannel {
         queueEdit();
       },
     });
+    clearInterval(heartbeat);
 
     // Cập nhật history ring-buffer cho chat này
     history.push({
