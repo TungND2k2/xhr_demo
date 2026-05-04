@@ -27,8 +27,11 @@ const ConfigSchema = z.object({
   QUEUE_MAX_SIZE: z.coerce.number().default(100),
   QUEUE_JOB_TIMEOUT_MS: z.coerce.number().default(660_000),
 
-  // Pipeline
-  MAX_TOOL_LOOPS: z.coerce.number().default(10),
+  // Pipeline — số "turn" tối đa (mỗi turn có thể gọi nhiều tool song song).
+  // Bump 10→30 vì các flow đối tác phức tạp (search nhiều keyword + cập nhật
+  // multi-field cho 4-5 đơn) thường cần 15-25 turns. Nếu loop infinite thật
+  // sự thì 30 vẫn cap được.
+  MAX_TOOL_LOOPS: z.coerce.number().default(30),
 
   // Cron
   CRON_TICK_MS: z.coerce.number().default(10_000),
