@@ -114,6 +114,11 @@ export class TelegramChannel {
   >();
   private readonly MAX_HISTORY = 12;
 
+  /** Per-chatId serial chain — đảm bảo trong cùng 1 chat (đặc biệt group),
+   *  các message được xử lý tuần tự để không có race khi đọc/ghi chatHistory.
+   *  Chat khác nhau vẫn parallel theo QUEUE_CONCURRENCY. */
+  private readonly chatChains = new Map<number, Promise<void>>();
+
   constructor(
     private readonly botToken: string,
     private readonly config: Config,
@@ -322,7 +327,7 @@ export class TelegramChannel {
       id: newId(),
       priority: 1,
       enqueuedAt: Date.now(),
-      run: () => this.processMessage(chatId, text, msg),
+      run: () => this.runOnChat(chatId, () => this.processMessage(chatId, text, msg)),
     };
 
     if (!this.queue.enqueue(job)) {
@@ -706,6 +711,29 @@ export class TelegramChannel {
    *  command yet — chỉ programmatic. */
   clearChatHistory(chatId: number): void {
     this.chatHistory.delete(chatId);
+  }
+
+  /**
+   * Serialize work cho cùng 1 chatId qua Promise chain. Chat khác nhau
+   * vẫn chạy song song bởi MessageQueue.QUEUE_CONCURRENCY.
+   *
+   * Trade-off: nếu 1 chat dồn nhiều message liền nhau, các job sau sẽ chờ
+   * job trước xong (block 1 slot concurrency). Chấp nhận được vì:
+   *  - DM: cùng chatId = cùng 1 user → không ai spam vô nghĩa
+   *  - Group: tuần tự là điều ta muốn, để history & context đúng thứ tự
+   */
+  private async runOnChat(chatId: number, fn: () => Promise<void>): Promise<void> {
+    const prev = this.chatChains.get(chatId) ?? Promise.resolve();
+    const next = prev.catch(() => {}).then(fn);
+    this.chatChains.set(chatId, next);
+    try {
+      await next;
+    } finally {
+      // Cleanup khi chain rỗng — tránh leak Map theo thời gian
+      if (this.chatChains.get(chatId) === next) {
+        this.chatChains.delete(chatId);
+      }
+    }
   }
 
   private async sendPlainMessage(chatId: number, text: string): Promise<number | null> {

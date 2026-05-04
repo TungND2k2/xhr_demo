@@ -4,6 +4,7 @@ import { buildConfig } from "payload";
 import { mongooseAdapter } from "@payloadcms/db-mongodb";
 import { lexicalEditor } from "@payloadcms/richtext-lexical";
 import { formBuilderPlugin } from "@payloadcms/plugin-form-builder";
+import { s3Storage } from "@payloadcms/storage-s3";
 import { vi } from "@payloadcms/translations/languages/vi";
 import { en } from "@payloadcms/translations/languages/en";
 import sharp from "sharp";
@@ -56,6 +57,23 @@ export default buildConfig({
     Counters,
   ],
   plugins: [
+    // S3-compatible storage cho collection media. Endpoint do .env định nghĩa
+    // (xorcloud / R2 / MinIO / AWS đều dùng chung adapter này). forcePathStyle
+    // bật để tương thích với MinIO-style endpoints.
+    s3Storage({
+      enabled: !!process.env.S3_BUCKET,
+      collections: { media: true },
+      bucket: process.env.S3_BUCKET ?? "",
+      config: {
+        endpoint: process.env.S3_ENDPOINT,
+        region: process.env.S3_REGION ?? "us-east-1",
+        forcePathStyle: true,
+        credentials: {
+          accessKeyId: process.env.S3_ACCESS_KEY ?? "",
+          secretAccessKey: process.env.S3_SECRET_KEY ?? "",
+        },
+      },
+    }),
     formBuilderPlugin({
       // Manager + admin tự build form qua giao diện kéo thả
       // — dùng cho hồ sơ đăng ký LĐ, đánh giá đào tạo, khảo sát sau XK...

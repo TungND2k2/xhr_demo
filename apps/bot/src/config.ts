@@ -23,7 +23,7 @@ const ConfigSchema = z.object({
   LOG_LEVEL: z.enum(["debug", "info", "warn", "error"]).default("info"),
 
   // Queue
-  QUEUE_CONCURRENCY: z.coerce.number().default(3),
+  QUEUE_CONCURRENCY: z.coerce.number().default(5),
   QUEUE_MAX_SIZE: z.coerce.number().default(100),
   QUEUE_JOB_TIMEOUT_MS: z.coerce.number().default(120_000),
 

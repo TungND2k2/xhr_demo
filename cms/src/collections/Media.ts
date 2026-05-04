@@ -12,8 +12,9 @@ import type { CollectionConfig } from "payload";
  * tra cứu sau này. AI khi cần tìm file ("hồ sơ Nguyễn Văn A đâu", "HĐ
  * tháng 3") query Payload với `where[description][contains]=...`.
  *
- * Dev: lưu vào ./media (bên trong cms/), Payload serve qua /media/...
- * Prod: nên cấu hình S3 adapter (@payloadcms/storage-s3) — chưa wire.
+ * Storage: dùng @payloadcms/storage-s3 wire trong payload.config.ts. File
+ * thực được đẩy lên S3 bucket (xem env S3_*); nếu thiếu env thì fallback
+ * về local disk ./media/. Payload luôn serve qua /api/media/file/<filename>.
  */
 export const Media: CollectionConfig = {
   slug: "media",

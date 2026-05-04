@@ -16,6 +16,7 @@
     "@payloadcms/next": "^3.84.1",
     "@payloadcms/plugin-form-builder": "^3.84.1",
     "@payloadcms/richtext-lexical": "^3.84.1",
+    "@payloadcms/storage-s3": "^3.84.1",
     "cross-env": "^7.0.3",
     "graphql": "^16.13.2",
     "next": "16.2.4",
