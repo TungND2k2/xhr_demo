@@ -186,6 +186,83 @@ ${truncated}
 }
 
 /**
+ * OCR + tóm tắt 1 PDF scan đã convert thành nhiều page PNGs.
+ * Khác `describeImage` (1 ảnh): gửi tất cả pages 1 lượt, prompt yêu cầu
+ * trả thêm `fullText` để bot save vào `extractedText`. Sau này AI có thể
+ * `get_media_content`/`redescribe_media` mà không cần re-OCR.
+ *
+ * Output: { kind, description, fullText } — fullText là toàn bộ text từng
+ * trang format "## Trang 1\n...\n## Trang 2\n..."
+ */
+export async function describeScannedPdf(
+  fileName: string,
+  pages: Array<{
+    page: number;
+    buffer: Buffer | ArrayBuffer;
+    mediaType: "image/jpeg" | "image/png" | "image/gif" | "image/webp";
+  }>,
+): Promise<FileDescription & { fullText: string }> {
+  if (pages.length === 0) {
+    return { ...FALLBACK, fullText: "" };
+  }
+
+  async function* messages(): AsyncIterable<SDKUserMessage> {
+    const content: Array<
+      | { type: "image"; source: { type: "base64"; media_type: string; data: string } }
+      | { type: "text"; text: string }
+    > = pages.map((p) => {
+      const buf = p.buffer instanceof Buffer ? p.buffer : Buffer.from(new Uint8Array(p.buffer));
+      return {
+        type: "image" as const,
+        source: {
+          type: "base64" as const,
+          media_type: p.mediaType,
+          data: buf.toString("base64"),
+        },
+      };
+    });
+    content.push({
+      type: "text",
+      text:
+        `Tên file: ${fileName}\n\n` +
+        `Đây là ${pages.length} trang scan của 1 tài liệu duy nhất (theo thứ tự). ` +
+        `OCR toàn bộ text + phân loại theo schema:\n\n` +
+        `{\n  "kind": "<một trong các loại>",\n` +
+        `  "description": "<4-8 câu tiếng Việt dày đặc entity>",\n` +
+        `  "fullText": "## Trang 1\\n<text trang 1>\\n\\n## Trang 2\\n<text trang 2>\\n..."\n}\n\n` +
+        `CHỈ trả JSON.`,
+    });
+    yield {
+      type: "user",
+      parent_tool_use_id: null,
+      message: { role: "user", content: content as never },
+    };
+  }
+
+  try {
+    const raw = await runQuery(messages(), `pdf-scan:${fileName}`);
+    const block = findFirstJsonBlock(raw);
+    if (!block) {
+      logger.warn("Describe", `pdf-scan ${fileName} no JSON block — fallback to raw text`);
+      return {
+        kind: "other",
+        description: raw.trim().slice(0, 800) || FALLBACK.description,
+        fullText: raw.trim(),
+      };
+    }
+    const obj = JSON.parse(block) as Partial<FileDescription & { fullText: string }>;
+    return {
+      kind: (obj.kind ?? "other") as MediaKind,
+      description: (obj.description ?? "").trim() || FALLBACK.description,
+      fullText: (obj.fullText ?? "").trim(),
+    };
+  } catch (err) {
+    logger.warn("Describe", `pdf-scan ${fileName} failed: ${err}`);
+    return { ...FALLBACK, fullText: "" };
+  }
+}
+
+/**
  * Tóm tắt 1 ảnh — gửi base64 qua claude-agent-sdk vision (OAuth Claude Max).
  */
 export async function describeImage(
