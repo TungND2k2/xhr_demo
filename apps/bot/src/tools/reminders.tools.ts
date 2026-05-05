@@ -32,6 +32,8 @@ const ROLE_VALUES = [
 
 interface ReminderRow {
   id: string;
+  createdAt: string;
+  updatedAt: string;
   title: string;
   description?: string;
   dueAt: string;
@@ -43,6 +45,7 @@ interface ReminderRow {
   snoozeUntil?: string;
   relatedOrder?: string | { id: string; orderCode?: string };
   relatedWorker?: string | { id: string; workerCode?: string };
+  [key: string]: unknown;
 }
 
 function ok(text: string): CallToolResult {
