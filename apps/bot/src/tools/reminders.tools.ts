@@ -37,7 +37,8 @@ interface ReminderRow {
   title: string;
   description?: string;
   dueAt: string;
-  recipientType: "user" | "telegram_user" | "role";
+  recipientType: "chat" | "user" | "telegram_user" | "role";
+  recipientChatId?: string;
   recipientUser?: string | { id: string; email?: string; displayName?: string };
   recipientTelegramUserId?: string;
   recipientRole?: string;
@@ -59,7 +60,9 @@ function err(message: string): CallToolResult {
 function fmt(rem: ReminderRow): string {
   const lines: string[] = [`#${rem.id} ${rem.title}`];
   lines.push(`  📅 dueAt: ${rem.dueAt}`);
-  if (rem.recipientType === "user") {
+  if (rem.recipientType === "chat") {
+    lines.push(`  💬 recipient: chat ${rem.recipientChatId}`);
+  } else if (rem.recipientType === "user") {
     const u = rem.recipientUser;
     const who =
       typeof u === "string"
@@ -67,7 +70,7 @@ function fmt(rem: ReminderRow): string {
         : (u?.displayName ?? u?.email ?? u?.id ?? "?");
     lines.push(`  👤 recipient: ${who} (system user)`);
   } else if (rem.recipientType === "telegram_user") {
-    lines.push(`  💬 recipient: telegram ${rem.recipientTelegramUserId}`);
+    lines.push(`  📞 recipient: telegram user ${rem.recipientTelegramUserId}`);
   } else if (rem.recipientType === "role") {
     lines.push(`  🏢 recipient: role=${rem.recipientRole}`);
   }
@@ -82,29 +85,39 @@ function fmt(rem: ReminderRow): string {
 
 const create_reminder = tool(
   "create_reminder",
-  `Tạo 1 lịch nhắc nhở. Bot sẽ DM Telegram người nhận đúng giờ \`dueAt\`.
+  `Tạo 1 lịch nhắc nhở. Bot sẽ bắn message vào chat đúng giờ \`dueAt\`.
 
-3 dạng recipient:
-- recipientType="user": người là nhân viên hệ thống. recipientUser = user.id từ
-  collection \`users\` (gọi list_users / get_user / lookup_telegram_user→linkedSystemUser).
-- recipientType="telegram_user": chưa link system account, gửi thẳng
-  Telegram. recipientTelegramUserId = id Telegram số (lookup_telegram_user
-  trả về). DÙNG CÁCH NÀY khi user nói "nhắc tôi" và bạn đã có
-  telegramUserId của họ trong system prompt context.
-- recipientType="role": broadcast cả phòng ban. recipientRole hợp lệ:
-  admin, manager, recruiter, trainer, visa_specialist, accountant, medical.
+4 dạng recipient (chọn theo bối cảnh):
+- recipientType="chat" (DEFAULT): bắn vào 1 chat cụ thể (DM hoặc group).
+  recipientChatId = chatId hiện tại (xem block "Người đang chat với bạn"
+  trong system prompt). DÙNG CÁCH NÀY cho mọi yêu cầu "nhắc tôi", "nhắc
+  vào group này" — reminder sẽ hiện trong CHÍNH chat hiện tại.
+- recipientType="telegram_user": DM trực tiếp 1 user Telegram. Dùng khi
+  user nói "nhắc anh @ha_ntv" — bot DM riêng vào private chat của @ha_ntv
+  (KHÔNG nhắn vào group hiện tại).
+- recipientType="user": người là nhân viên hệ thống có account. Dùng
+  list_users/get_user/lookup_telegram_user→linkedSystemUser để lấy user.id.
+- recipientType="role": broadcast DM cho tất cả nhân viên có role X.
+  Hợp lệ: admin, manager, recruiter, trainer, visa_specialist, accountant,
+  medical.
 
-\`dueAt\` PHẢI là ISO 8601 với timezone +07:00. Suy ra từ "Thời gian VN"
-trong system prompt — KHÔNG hỏi user mấy giờ rồi.`,
+\`dueAt\` PHẢI là ISO 8601 với timezone +07:00. Suy từ "Thời gian VN"
+trong system prompt — KHÔNG hỏi user mấy giờ.`,
   {
-    title: z.string().min(1).describe("Tiêu đề ngắn — sẽ hiện đầu DM"),
+    title: z.string().min(1).describe("Tiêu đề ngắn — sẽ hiện đầu message"),
     dueAt: z
       .string()
       .describe("ISO 8601 datetime với timezone, vd 2026-05-04T09:00:00+07:00"),
     recipientType: z
-      .enum(["user", "telegram_user", "role"])
+      .enum(["chat", "user", "telegram_user", "role"])
       .describe(
-        "'user'=nhân viên hệ thống, 'telegram_user'=DM trực tiếp Telegram ID, 'role'=cả phòng ban",
+        "'chat'=bắn vào chat cụ thể (default cho 'nhắc tôi'), 'user'=DM nhân viên, 'telegram_user'=DM tg user, 'role'=broadcast role",
+      ),
+    recipientChatId: z
+      .string()
+      .optional()
+      .describe(
+        "Chat ID khi recipientType='chat'. Số dương = DM, âm = group/supergroup. Lấy từ 'chatId hiện tại' trong system prompt.",
       ),
     recipientUser: z
       .string()
@@ -123,9 +136,14 @@ trong system prompt — KHÔNG hỏi user mấy giờ rồi.`,
     relatedWorkerId: z.string().optional().describe("Liên kết LĐ nếu có"),
   },
   async (args) => {
+    if (args.recipientType === "chat" && !args.recipientChatId) {
+      return err(
+        "Thiếu recipientChatId khi recipientType='chat'. Lấy từ 'chatId hiện tại' trong system prompt.",
+      );
+    }
     if (args.recipientType === "user" && !args.recipientUser) {
       return err(
-        "Thiếu recipientUser khi recipientType='user'. Dùng list_users/get_user để lấy id, hoặc đổi sang recipientType='telegram_user' nếu chỉ có telegramUserId.",
+        "Thiếu recipientUser khi recipientType='user'. Dùng list_users/get_user để lấy id.",
       );
     }
     if (args.recipientType === "telegram_user" && !args.recipientTelegramUserId) {
@@ -141,6 +159,7 @@ trong system prompt — KHÔNG hỏi user mấy giờ rồi.`,
         recipientType: args.recipientType,
         status: "pending",
       };
+      if (args.recipientChatId) body.recipientChatId = args.recipientChatId;
       if (args.recipientUser) body.recipientUser = args.recipientUser;
       if (args.recipientTelegramUserId)
         body.recipientTelegramUserId = args.recipientTelegramUserId;
@@ -224,7 +243,8 @@ const update_reminder = tool(
     id: z.string().describe("Reminder ID"),
     title: z.string().optional(),
     dueAt: z.string().optional(),
-    recipientType: z.enum(["user", "telegram_user", "role"]).optional(),
+    recipientType: z.enum(["chat", "user", "telegram_user", "role"]).optional(),
+    recipientChatId: z.string().optional(),
     recipientUser: z.string().optional(),
     recipientTelegramUserId: z.string().optional(),
     recipientRole: z.enum(ROLE_VALUES).optional(),

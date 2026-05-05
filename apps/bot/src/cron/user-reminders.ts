@@ -27,7 +27,8 @@ interface ReminderDoc {
   title: string;
   description?: string;
   dueAt: string;
-  recipientType: "user" | "role" | "telegram_user";
+  recipientType: "chat" | "user" | "role" | "telegram_user";
+  recipientChatId?: string;
   recipientUser?: string | UserDoc;
   recipientRole?: string;
   recipientTelegramUserId?: string;
@@ -70,17 +71,32 @@ function buildMessage(rem: ReminderDoc): string {
 }
 
 /**
- * Resolve recipients cho 1 reminder. Trả về danh sách user có
- * `telegramUserId` (đã filter bot DM được). De-dup theo user.id.
+ * Resolve "chatIds to send" — 1 reminder có thể bắn về 1 hoặc nhiều chat.
+ * Hỗ trợ 4 dạng recipient:
+ *  - "chat": bắn thẳng vào recipientChatId (DM với user nếu chatId dương,
+ *    hoặc vào group/supergroup nếu chatId âm). Đây là default cho khi user
+ *    nhờ bot trong group — reminder bắn lại đúng group đó.
+ *  - "user": tra cứu users collection → lấy users.telegramUserId (DM)
+ *  - "telegram_user": dùng trực tiếp recipientTelegramUserId (DM)
+ *  - "role": broadcast tất cả users.role=X (DM cho từng user)
  *
- * Hỗ trợ 3 dạng recipient:
- *  - "user": tra cứu users collection → lấy telegramUserId nếu có
- *  - "telegram_user": dùng trực tiếp recipientTelegramUserId (không cần
- *    link system user) — case khi AI tạo reminder cho 1 Telegram user
- *    chưa được admin link với account
- *  - "role": broadcast tất cả users.role=X có telegramUserId
+ * Trả về list { chatId, label } để cron loop send.
  */
-async function resolveRecipients(rem: ReminderDoc): Promise<UserDoc[]> {
+async function resolveChatTargets(
+  rem: ReminderDoc,
+): Promise<Array<{ chatId: number; label: string }>> {
+  if (rem.recipientType === "chat") {
+    if (!rem.recipientChatId) return [];
+    const chatId = Number(rem.recipientChatId);
+    if (!Number.isFinite(chatId)) return [];
+    return [{ chatId, label: `chat ${rem.recipientChatId}` }];
+  }
+  if (rem.recipientType === "telegram_user") {
+    if (!rem.recipientTelegramUserId) return [];
+    const chatId = Number(rem.recipientTelegramUserId);
+    if (!Number.isFinite(chatId)) return [];
+    return [{ chatId, label: `tg user ${rem.recipientTelegramUserId}` }];
+  }
   if (rem.recipientType === "user") {
     if (!rem.recipientUser) return [];
     const userId =
@@ -88,32 +104,29 @@ async function resolveRecipients(rem: ReminderDoc): Promise<UserDoc[]> {
     if (!userId) return [];
     try {
       const user = await payload.request<UserDoc>(`/api/users/${userId}`);
-      return user.telegramUserId ? [user] : [];
+      if (!user.telegramUserId) return [];
+      const chatId = Number(user.telegramUserId);
+      if (!Number.isFinite(chatId)) return [];
+      return [{ chatId, label: user.email }];
     } catch (err) {
       logger.debug("UserReminder", `lookup user ${userId} failed: ${err}`);
       return [];
     }
   }
-
-  if (rem.recipientType === "telegram_user") {
-    if (!rem.recipientTelegramUserId) return [];
-    // Tạo "synthetic" UserDoc để code dưới chỉ cần loop chung 1 list
-    return [
-      {
-        id: `tg:${rem.recipientTelegramUserId}`,
-        email: `tg-${rem.recipientTelegramUserId}@telegram`,
-        telegramUserId: rem.recipientTelegramUserId,
-      },
-    ];
-  }
-
   if (rem.recipientType === "role") {
     if (!rem.recipientRole) return [];
     try {
       const res = await payload.request<PayloadFindResponse<UserDoc>>(`/api/users`, {
         query: { where: { role: { equals: rem.recipientRole } }, limit: 50 },
       });
-      return res.docs.filter((u) => u.telegramUserId);
+      const out: Array<{ chatId: number; label: string }> = [];
+      for (const u of res.docs) {
+        if (!u.telegramUserId) continue;
+        const chatId = Number(u.telegramUserId);
+        if (!Number.isFinite(chatId)) continue;
+        out.push({ chatId, label: u.email });
+      }
+      return out;
     } catch (err) {
       logger.debug("UserReminder", `lookup role=${rem.recipientRole} failed: ${err}`);
       return [];
@@ -162,27 +175,27 @@ export async function runUserReminders({
       processed += 1;
       if (rem.snoozeUntil && rem.snoozeUntil > nowIso) continue;
 
-      const recipients = await resolveRecipients(rem);
+      const targets = await resolveChatTargets(rem);
       const text = buildMessage(rem);
 
-      if (recipients.length === 0 && adminChatId) {
+      if (targets.length === 0 && adminChatId) {
         await telegram.sendMessage(adminChatId, `[fallback] ${text}`);
         sentTotal += 1;
       }
 
-      for (const u of recipients) {
-        if (!u.telegramUserId) continue;
-        const chatId = Number(u.telegramUserId);
-        if (!Number.isFinite(chatId)) continue;
+      for (const t of targets) {
         try {
-          await telegram.sendMessage(chatId, text);
+          await telegram.sendMessage(t.chatId, text);
           sentTotal += 1;
           logger.info(
             "UserReminder",
-            `→ ${u.email} (${chatId}): "${rem.title.slice(0, 60)}"`,
+            `→ ${t.label} (chat ${t.chatId}): "${rem.title.slice(0, 60)}"`,
           );
         } catch (err) {
-          logger.warn("UserReminder", `send to ${u.email} failed: ${err}`);
+          logger.warn(
+            "UserReminder",
+            `send to ${t.label} (chat ${t.chatId}) failed: ${err}`,
+          );
         }
       }
 

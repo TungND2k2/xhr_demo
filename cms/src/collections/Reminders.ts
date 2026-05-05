@@ -76,13 +76,25 @@ export const Reminders: CollectionConfig = {
           label: "Gửi tới",
           type: "select",
           required: true,
-          defaultValue: "user",
+          defaultValue: "chat",
           options: [
+            { label: "💬 Chat (DM hoặc group cụ thể)", value: "chat" },
             { label: "👤 1 nhân viên (account hệ thống)", value: "user" },
-            { label: "💬 1 user Telegram (chưa link account)", value: "telegram_user" },
+            { label: "📞 1 user Telegram (chưa link account)", value: "telegram_user" },
             { label: "🏢 Cả phòng ban (theo vai trò)", value: "role" },
           ],
           admin: { width: "40%" },
+        },
+        {
+          name: "recipientChatId",
+          label: "Chat ID",
+          type: "text",
+          admin: {
+            condition: (data) => data?.recipientType === "chat",
+            width: "60%",
+            description:
+              "Telegram chat ID — số dương (DM với user) hoặc âm (group/supergroup). Bot bắn message thẳng vào chat này.",
+          },
         },
         {
           name: "recipientUser",
