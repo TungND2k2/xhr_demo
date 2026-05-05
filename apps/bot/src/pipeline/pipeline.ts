@@ -226,6 +226,13 @@ export async function runPipeline(input: PipelineInput): Promise<PipelineOutput>
     SYSTEM_PROMPT,
   ].join("\n");
 
+  // Tạm log INFO (không phải debug) để confirm prompt thực sự có time +
+  // chatter — gỡ sau khi xác nhận. ⚠️ TEMP DEBUG.
+  logger.info(
+    tag,
+    `prompt size=${dynamicSystemPrompt.length}, first 300: ${dynamicSystemPrompt.slice(0, 300).replace(/\n/g, " | ")}`,
+  );
+
   try {
     const q = query({
       prompt: buildPrompt(input.message, attachments, input.priorMessages ?? []),
