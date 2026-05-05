@@ -206,15 +206,40 @@ export async function runPipeline(input: PipelineInput): Promise<PipelineOutput>
   ];
 
   if (chatter) {
+    // Tính dueAt mẫu = nowVN + 1 phút để AI có ví dụ ISO chính xác
+    const exampleDue = new Date(Date.now() + 60_000 + 7 * 3600_000)
+      .toISOString()
+      .replace("Z", "+07:00");
     headBlock.push(
       "",
       "## Người đang chat với bạn ngay lúc này",
       `- Tên: ${chatterName}`,
       `- telegramUserId: ${chatter.telegramUserId}`,
       `- username: ${chatter.username ? "@" + chatter.username : "(không có)"}`,
-      `- chatId hiện tại: ${chatter.chatId} (${chatter.chatType}${chatter.chatTitle ? ` "${chatter.chatTitle}"` : ""})`,
+      `- chatId: ${chatter.chatId} (${chatter.chatType}${chatter.chatTitle ? ` "${chatter.chatTitle}"` : ""})`,
       "",
-      `Khi user nói "tôi", "em", "anh/chị" tự xưng → trỏ về người này. Nếu cần tạo reminder cho "tôi": dùng \`recipientType="telegram_user"\` + \`recipientTelegramUserId="${chatter.telegramUserId}"\`. CẤM hỏi "user ID của bạn là gì".`,
+      `## VÍ DỤ THỰC TẾ — ÁP DỤNG NGAY KHÔNG HỎI LẠI`,
+      "",
+      `Nếu user gõ: "1p nữa nhắc tôi test"`,
+      `Bạn PHẢI gọi tool ngay (KHÔNG hỏi gì):`,
+      "```",
+      `create_reminder({`,
+      `  recipientType: "telegram_user",`,
+      `  recipientTelegramUserId: "${chatter.telegramUserId}",`,
+      `  title: "test",`,
+      `  dueAt: "${exampleDue}"`,
+      `})`,
+      "```",
+      "",
+      `Tương tự:`,
+      `- "5p nữa nhắc tôi gọi A" → dueAt = nowVN+5min, recipientTelegramUserId="${chatter.telegramUserId}"`,
+      `- "9h sáng mai nhắc tôi B" → dueAt = (mai 09:00 +07:00), recipientTelegramUserId="${chatter.telegramUserId}"`,
+      `- Khi user nói "tôi"/"em"/"anh"/"chị" tự xưng → ALWAYS dùng recipientTelegramUserId="${chatter.telegramUserId}".`,
+      "",
+      `CẤM hỏi:`,
+      `- "user ID của bạn là gì" — bạn đã có: ${chatter.telegramUserId}`,
+      `- "username của bạn là gì" — bạn đã có: ${chatter.username ? "@" + chatter.username : "(không có nhưng vẫn dùng telegramUserId được)"}`,
+      `- "bây giờ là mấy giờ" — đã có giờ VN ở trên`,
     );
   }
 
