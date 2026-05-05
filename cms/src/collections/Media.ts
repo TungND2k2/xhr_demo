@@ -19,10 +19,14 @@ import type { CollectionConfig } from "payload";
 export const Media: CollectionConfig = {
   slug: "media",
   labels: { singular: "Tệp tin", plural: "Tệp tin" },
+  // Folders bật cho phép tạo thư mục nested (Payload tự sinh collection
+  // payload-folders + thêm field `folder` vào collection này, render UI
+  // duyệt theo cây thư mục trong admin panel).
+  folders: true,
   admin: {
     group: "Hệ thống",
     useAsTitle: "filename",
-    defaultColumns: ["filename", "alt", "kind", "uploadedAt"],
+    defaultColumns: ["filename", "alt", "kind", "folder", "uploadedAt"],
   },
   access: {
     read: () => true,
