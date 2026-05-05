@@ -185,38 +185,45 @@ export async function runPipeline(input: PipelineInput): Promise<PipelineOutput>
     logger.warn(tag, `⏱ Timeout after ${PIPELINE_TIMEOUT_MS}ms — aborting`);
   }, PIPELINE_TIMEOUT_MS);
 
-  // Inject thời gian hiện tại + người đang chat. AI cần cả hai để parse
-  // "nhắc tôi 9h sáng mai" → ISO datetime + đúng người nhận.
+  // Đặt time + chatter ở **ĐẦU** prompt (Claude focus rất mạnh phần đầu).
+  // Trước đó để cuối → Claude bỏ qua, vẫn hỏi user "mấy giờ rồi".
   const nowIso = new Date().toISOString();
   const nowVN = new Date(Date.now() + 7 * 3600_000).toISOString().replace("Z", "+07:00");
   const chatter = input.currentChatter;
-  let chatterBlock = "";
+  const chatterName = chatter
+    ? [chatter.firstName, chatter.lastName].filter(Boolean).join(" ").trim() || chatter.username || String(chatter.telegramUserId)
+    : "?";
+
+  const headBlock = [
+    "# THÔNG TIN BẮT BUỘC ĐỌC TRƯỚC TIÊN",
+    "",
+    "## Thời gian hiện tại",
+    `- UTC: ${nowIso}`,
+    `- Giờ VN (UTC+7): ${nowVN}`,
+    `- Timezone doanh nghiệp: Asia/Ho_Chi_Minh.`,
+    `- Khi user nói "sáng mai", "1 phút nữa", "thứ 6 9h", "3 ngày nữa", "1p", "30p" → DỰA VÀO giờ VN ở trên để tính ISO 8601 với offset +07:00. CẤM hỏi user "mấy giờ rồi" hoặc yêu cầu xác nhận giờ — bạn ĐÃ CÓ giờ.`,
+    `- "1p" = 1 phút. "1h" / "1 tiếng" = 1 giờ. KHÔNG nhầm lẫn.`,
+  ];
+
   if (chatter) {
-    const nameLine = [chatter.firstName, chatter.lastName].filter(Boolean).join(" ").trim();
-    chatterBlock = [
-      "## Người đang chat với bạn",
-      `- telegramUserId: \`${chatter.telegramUserId}\``,
-      `- username: ${chatter.username ? "@" + chatter.username : "(không có)"}`,
-      `- tên: ${nameLine || "(không có)"}`,
-      `- chatId hiện tại: \`${chatter.chatId}\` (${chatter.chatType}${chatter.chatTitle ? ` "${chatter.chatTitle}"` : ""})`,
+    headBlock.push(
       "",
-      "Khi user nói 'nhắc tôi', 'cho tôi xem', 'của tôi'... → 'tôi' là người này. Lookup",
-      "system user qua `lookup_telegram_user({telegramUserId:'<id>'})` rồi lấy",
-      "`linkedSystemUser` để dùng làm recipientUser cho reminder. Nếu chưa link",
-      "thì bảo user nhờ admin link, hoặc tạo reminder không có recipientUser cụ thể",
-      "(admin sẽ thấy trong portal).",
-    ].join("\n");
+      "## Người đang chat với bạn ngay lúc này",
+      `- Tên: ${chatterName}`,
+      `- telegramUserId: ${chatter.telegramUserId}`,
+      `- username: ${chatter.username ? "@" + chatter.username : "(không có)"}`,
+      `- chatId hiện tại: ${chatter.chatId} (${chatter.chatType}${chatter.chatTitle ? ` "${chatter.chatTitle}"` : ""})`,
+      "",
+      `Khi user nói "tôi", "em", "anh/chị" tự xưng → trỏ về người này. Nếu cần tạo reminder cho "tôi": dùng \`recipientType="telegram_user"\` + \`recipientTelegramUserId="${chatter.telegramUserId}"\`. CẤM hỏi "user ID của bạn là gì".`,
+    );
   }
 
   const dynamicSystemPrompt = [
-    SYSTEM_PROMPT,
+    headBlock.join("\n"),
     "",
-    "## Thời gian hệ thống",
-    `Thời gian hiện tại (UTC): ${nowIso}`,
-    `Thời gian VN (UTC+7): ${nowVN}`,
-    `Timezone doanh nghiệp: Asia/Ho_Chi_Minh (UTC+7).`,
-    `Khi user nói "sáng mai", "thứ 6 9h", "3 ngày nữa", "1 phút nữa" → tự suy ra ISO 8601 với offset +07:00. KHÔNG hỏi user "mấy giờ rồi".`,
-    chatterBlock ? "\n" + chatterBlock : "",
+    "---",
+    "",
+    SYSTEM_PROMPT,
   ].join("\n");
 
   try {
