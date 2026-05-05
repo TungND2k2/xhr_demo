@@ -262,7 +262,15 @@ export async function runPipeline(input: PipelineInput): Promise<PipelineOutput>
     const q = query({
       prompt: buildPrompt(input.message, attachments, input.priorMessages ?? []),
       options: {
-        systemPrompt: dynamicSystemPrompt,
+        // Switch từ systemPrompt: <string> → preset: 'claude_code' + append.
+        // Lý do: với string thuần, Claude không nạp standard tool-calling
+        // protocol → nó "chat" thay vì gọi tool. Preset include phần đó,
+        // mình append context riêng (time, chatter, domain rules) vào sau.
+        systemPrompt: {
+          type: "preset",
+          preset: "claude_code",
+          append: dynamicSystemPrompt,
+        },
         mcpServers: { skillbot: mcpServer },
         tools: [],
         permissionMode: "bypassPermissions",
