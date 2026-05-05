@@ -226,11 +226,11 @@ export async function runPipeline(input: PipelineInput): Promise<PipelineOutput>
     SYSTEM_PROMPT,
   ].join("\n");
 
-  // Tạm log INFO (không phải debug) để confirm prompt thực sự có time +
-  // chatter — gỡ sau khi xác nhận. ⚠️ TEMP DEBUG.
+  // ⚠️ TEMP DEBUG — full head block (time + chatter) để confirm AI thấy.
   logger.info(
     tag,
-    `prompt size=${dynamicSystemPrompt.length}, first 300: ${dynamicSystemPrompt.slice(0, 300).replace(/\n/g, " | ")}`,
+    `prompt size=${dynamicSystemPrompt.length}, hasChatter=${!!chatter}, head:\n` +
+      dynamicSystemPrompt.slice(0, 1500),
   );
 
   try {
