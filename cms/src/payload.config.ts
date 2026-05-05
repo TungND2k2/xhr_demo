@@ -19,6 +19,9 @@ import { WorkflowStages } from "./collections/WorkflowStages";
 import { Media } from "./collections/Media";
 import { Counters } from "./collections/Counters";
 import { Reminders } from "./collections/Reminders";
+import { TelegramUsers } from "./collections/TelegramUsers";
+import { TelegramGroups } from "./collections/TelegramGroups";
+import { TelegramMembership } from "./collections/TelegramMembership";
 
 const filename = fileURLToPath(import.meta.url);
 const dirname = path.dirname(filename);
@@ -57,6 +60,9 @@ export default buildConfig({
     Media,
     Counters,
     Reminders,
+    TelegramUsers,
+    TelegramGroups,
+    TelegramMembership,
   ],
   plugins: [
     // S3-compatible storage cho collection media. Endpoint do .env định nghĩa

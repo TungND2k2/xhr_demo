@@ -20,6 +20,7 @@ import { convertToMarkdown, MarkItDownError } from "../extraction/markitdown.js"
 import { describeDocument, describeImage, describeScannedPdf } from "../extraction/describe.js";
 import { pdfToImages, PdfToImagesError, type PdfPageImage } from "../extraction/pdf-to-images.js";
 import { payload, PayloadError } from "../payload/client.js";
+import { syncOnIncomingMessage } from "../payload/telegram-sync.js";
 
 interface TgUser {
   id: number;
@@ -323,6 +324,18 @@ export class TelegramChannel {
     if (!msg.from) return;
     const chatId = msg.chat.id;
     const text = (overrideText ?? msg.text ?? msg.caption ?? "").trim();
+
+    // Auto-track Telegram identity (user + group + membership). Fire-and-
+    // forget — không block xử lý message. syncOnIncomingMessage tự find-
+    // before-create để không tạo duplicate.
+    void syncOnIncomingMessage(msg.from, msg.chat).then((res) => {
+      if (res.blocked) {
+        logger.info(
+          "Telegram",
+          `[${chatId}] from=${msg.from?.id} blocked by admin — skipping`,
+        );
+      }
+    });
 
     const job: QueueJob = {
       id: newId(),
@@ -664,6 +677,20 @@ export class TelegramChannel {
       );
       return;
     }
+    if (text === "/whoami" || text === "/myid") {
+      const u = msg.from;
+      const lines = [
+        "🆔 Thông tin Telegram của bạn:",
+        `• userId: \`${u?.id ?? "?"}\``,
+        `• username: ${u?.username ? "@" + u.username : "(không có)"}`,
+        `• tên: ${[u?.first_name, u?.last_name].filter(Boolean).join(" ")}`,
+        `• chatId hiện tại: \`${chatId}\` (${msg.chat.type})`,
+        "",
+        "Admin set field `Telegram User ID` trong portal = userId trên để bot DM được bạn.",
+      ];
+      await this.sendMessage(chatId, lines.join("\n"));
+      return;
+    }
 
     const summary = text
       ? `text "${text.slice(0, 80)}"`
@@ -672,7 +699,10 @@ export class TelegramChannel {
         : msg.photo
           ? `photo ${msg.photo[msg.photo.length - 1].width}×${msg.photo[msg.photo.length - 1].height}`
           : "(empty)";
-    logger.info("Telegram", `[${chatId}] ${summary}`);
+    const senderTag = msg.from
+      ? `from=${msg.from.id}${msg.from.username ? ` @${msg.from.username}` : ""}`
+      : "from=?";
+    logger.info("Telegram", `[${chatId}] ${senderTag} ${summary}`);
 
     // Initial status message — edit it as tools are called.
     const statusMsgId = await this.sendPlainMessage(chatId, "💭 Đang nghĩ...");
