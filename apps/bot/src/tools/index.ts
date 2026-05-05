@@ -10,6 +10,7 @@ import { contractTools } from "./contracts.tools.js";
 import { workflowStageTools } from "./workflow-stages.tools.js";
 import { formTools } from "./forms.tools.js";
 import { mediaTools } from "./media.tools.js";
+import { reminderTools } from "./reminders.tools.js";
 
 import { advanceOrderStatus } from "./orders.workflow.js";
 import { orderProgressSummary } from "./orders.summary.js";
@@ -28,6 +29,9 @@ export const allTools = [
 
   // Media search by AI-generated description.
   ...mediaTools,            // 2: search_media, get_media_content
+
+  // Reminders — lịch nhắc tự do (CEO/team).
+  ...reminderTools,         // 5: create/list/update/snooze/dismiss
 
   // Domain-specific.
   advanceOrderStatus,

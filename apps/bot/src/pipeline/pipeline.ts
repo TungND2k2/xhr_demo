@@ -174,11 +174,17 @@ export async function runPipeline(input: PipelineInput): Promise<PipelineOutput>
     logger.warn(tag, `⏱ Timeout after ${PIPELINE_TIMEOUT_MS}ms — aborting`);
   }, PIPELINE_TIMEOUT_MS);
 
+  // Inject thời gian hiện tại để AI parse "9h sáng mai" / "thứ 6" → ISO.
+  // Vietnam tz (+07:00) là chuẩn doanh nghiệp; nếu sau này deploy server khác
+  // có thể đọc từ env TZ.
+  const nowIso = new Date().toISOString();
+  const dynamicSystemPrompt = `${SYSTEM_PROMPT}\n\n## Thời gian hệ thống\nThời gian hiện tại (UTC): ${nowIso}\nTimezone doanh nghiệp: Asia/Ho_Chi_Minh (UTC+7).\nKhi user nói "sáng mai", "thứ 6 9h", "3 ngày nữa" → tự suy ra ISO 8601 với offset +07:00.`;
+
   try {
     const q = query({
       prompt: buildPrompt(input.message, attachments, input.priorMessages ?? []),
       options: {
-        systemPrompt: SYSTEM_PROMPT,
+        systemPrompt: dynamicSystemPrompt,
         mcpServers: { skillbot: mcpServer },
         tools: [],
         permissionMode: "bypassPermissions",

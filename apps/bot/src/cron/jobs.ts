@@ -10,6 +10,7 @@ import { payload, PayloadError } from "../payload/client.js";
 import type { PayloadFindResponse } from "../payload/types.js";
 import type { TelegramChannel } from "../telegram/channel.js";
 import { runOrderReminders } from "./order-reminders.js";
+import { runUserReminders } from "./user-reminders.js";
 
 interface OrderStatusRow {
   id: string;
@@ -104,6 +105,11 @@ export function buildCronJobs(opts: BuildCronJobsOptions = {}): CronJob[] {
       name: "hourly-order-reminders",
       schedule: "5 * * * *",
       run: () => runOrderReminders({ telegram: tg, adminChatId: adminChat }),
+    });
+    jobs.push({
+      name: "minute-user-reminders",
+      schedule: "* * * * *", // mỗi phút
+      run: () => runUserReminders({ telegram: tg, adminChatId: adminChat }),
     });
   }
 

@@ -18,6 +18,7 @@ import { Workflows } from "./collections/Workflows";
 import { WorkflowStages } from "./collections/WorkflowStages";
 import { Media } from "./collections/Media";
 import { Counters } from "./collections/Counters";
+import { Reminders } from "./collections/Reminders";
 
 const filename = fileURLToPath(import.meta.url);
 const dirname = path.dirname(filename);
@@ -55,6 +56,7 @@ export default buildConfig({
     WorkflowStages,
     Media,
     Counters,
+    Reminders,
   ],
   plugins: [
     // S3-compatible storage cho collection media. Endpoint do .env định nghĩa
