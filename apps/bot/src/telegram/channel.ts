@@ -785,6 +785,17 @@ export class TelegramChannel {
       message: text,
       attachments,
       priorMessages: history,
+      currentChatter: msg.from
+        ? {
+            telegramUserId: msg.from.id,
+            username: msg.from.username,
+            firstName: msg.from.first_name,
+            lastName: msg.from.last_name,
+            chatId: msg.chat.id,
+            chatType: msg.chat.type,
+            chatTitle: msg.chat.title,
+          }
+        : undefined,
       onToolCall: (name, args) => {
         const label = describeToolCall(name, args);
         activityLog.push(label);

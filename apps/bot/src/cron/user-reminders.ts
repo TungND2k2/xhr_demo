@@ -27,9 +27,10 @@ interface ReminderDoc {
   title: string;
   description?: string;
   dueAt: string;
-  recipientType: "user" | "role";
+  recipientType: "user" | "role" | "telegram_user";
   recipientUser?: string | UserDoc;
   recipientRole?: string;
+  recipientTelegramUserId?: string;
   status: "pending" | "sent" | "dismissed";
   snoozeUntil?: string;
   relatedOrder?: string | { id: string; orderCode?: string };
@@ -71,6 +72,13 @@ function buildMessage(rem: ReminderDoc): string {
 /**
  * Resolve recipients cho 1 reminder. Trả về danh sách user có
  * `telegramUserId` (đã filter bot DM được). De-dup theo user.id.
+ *
+ * Hỗ trợ 3 dạng recipient:
+ *  - "user": tra cứu users collection → lấy telegramUserId nếu có
+ *  - "telegram_user": dùng trực tiếp recipientTelegramUserId (không cần
+ *    link system user) — case khi AI tạo reminder cho 1 Telegram user
+ *    chưa được admin link với account
+ *  - "role": broadcast tất cả users.role=X có telegramUserId
  */
 async function resolveRecipients(rem: ReminderDoc): Promise<UserDoc[]> {
   if (rem.recipientType === "user") {
@@ -85,6 +93,18 @@ async function resolveRecipients(rem: ReminderDoc): Promise<UserDoc[]> {
       logger.debug("UserReminder", `lookup user ${userId} failed: ${err}`);
       return [];
     }
+  }
+
+  if (rem.recipientType === "telegram_user") {
+    if (!rem.recipientTelegramUserId) return [];
+    // Tạo "synthetic" UserDoc để code dưới chỉ cần loop chung 1 list
+    return [
+      {
+        id: `tg:${rem.recipientTelegramUserId}`,
+        email: `tg-${rem.recipientTelegramUserId}@telegram`,
+        telegramUserId: rem.recipientTelegramUserId,
+      },
+    ];
   }
 
   if (rem.recipientType === "role") {

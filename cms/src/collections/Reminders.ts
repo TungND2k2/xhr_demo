@@ -78,19 +78,30 @@ export const Reminders: CollectionConfig = {
           required: true,
           defaultValue: "user",
           options: [
-            { label: "👤 1 người cụ thể", value: "user" },
+            { label: "👤 1 nhân viên (account hệ thống)", value: "user" },
+            { label: "💬 1 user Telegram (chưa link account)", value: "telegram_user" },
             { label: "🏢 Cả phòng ban (theo vai trò)", value: "role" },
           ],
           admin: { width: "40%" },
         },
         {
           name: "recipientUser",
-          label: "Người nhận",
+          label: "Người nhận (account hệ thống)",
           type: "relationship",
           relationTo: "users",
           admin: {
             condition: (data) => data?.recipientType === "user",
             width: "60%",
+          },
+        },
+        {
+          name: "recipientTelegramUserId",
+          label: "Telegram User ID",
+          type: "text",
+          admin: {
+            condition: (data) => data?.recipientType === "telegram_user",
+            width: "60%",
+            description: "Bot DM trực tiếp telegramUserId này, không cần link system user",
           },
         },
         {

@@ -37,8 +37,9 @@ interface ReminderRow {
   title: string;
   description?: string;
   dueAt: string;
-  recipientType: "user" | "role";
+  recipientType: "user" | "telegram_user" | "role";
   recipientUser?: string | { id: string; email?: string; displayName?: string };
+  recipientTelegramUserId?: string;
   recipientRole?: string;
   status: "pending" | "sent" | "dismissed";
   sentAt?: string;
@@ -64,7 +65,9 @@ function fmt(rem: ReminderRow): string {
       typeof u === "string"
         ? u
         : (u?.displayName ?? u?.email ?? u?.id ?? "?");
-    lines.push(`  👤 recipient: ${who}`);
+    lines.push(`  👤 recipient: ${who} (system user)`);
+  } else if (rem.recipientType === "telegram_user") {
+    lines.push(`  💬 recipient: telegram ${rem.recipientTelegramUserId}`);
   } else if (rem.recipientType === "role") {
     lines.push(`  🏢 recipient: role=${rem.recipientRole}`);
   }
@@ -81,29 +84,40 @@ const create_reminder = tool(
   "create_reminder",
   `Tạo 1 lịch nhắc nhở. Bot sẽ DM Telegram người nhận đúng giờ \`dueAt\`.
 
-Khi user nói "nhắc tôi" → recipientType="user" + recipientUser=<id user
-hiện tại> (nếu biết, hoặc bỏ trống và để admin handle).
-Khi user nói "nhắc team tuyển dụng" → recipientType="role" + recipientRole="recruiter".
+3 dạng recipient:
+- recipientType="user": người là nhân viên hệ thống. recipientUser = user.id từ
+  collection \`users\` (gọi list_users / get_user / lookup_telegram_user→linkedSystemUser).
+- recipientType="telegram_user": chưa link system account, gửi thẳng
+  Telegram. recipientTelegramUserId = id Telegram số (lookup_telegram_user
+  trả về). DÙNG CÁCH NÀY khi user nói "nhắc tôi" và bạn đã có
+  telegramUserId của họ trong system prompt context.
+- recipientType="role": broadcast cả phòng ban. recipientRole hợp lệ:
+  admin, manager, recruiter, trainer, visa_specialist, accountant, medical.
 
-\`dueAt\` PHẢI là ISO 8601 với timezone (vd "2026-05-04T09:00:00+07:00"
-cho 9h sáng giờ VN). Tự suy ra date dựa vào "Thời gian hệ thống hiện tại"
-trong system prompt.`,
+\`dueAt\` PHẢI là ISO 8601 với timezone +07:00. Suy ra từ "Thời gian VN"
+trong system prompt — KHÔNG hỏi user mấy giờ rồi.`,
   {
     title: z.string().min(1).describe("Tiêu đề ngắn — sẽ hiện đầu DM"),
     dueAt: z
       .string()
       .describe("ISO 8601 datetime với timezone, vd 2026-05-04T09:00:00+07:00"),
-    recipientType: z.enum(["user", "role"]).describe("'user' = 1 người, 'role' = cả phòng ban"),
+    recipientType: z
+      .enum(["user", "telegram_user", "role"])
+      .describe(
+        "'user'=nhân viên hệ thống, 'telegram_user'=DM trực tiếp Telegram ID, 'role'=cả phòng ban",
+      ),
     recipientUser: z
       .string()
       .optional()
-      .describe("User ID khi recipientType='user'"),
+      .describe("system user.id khi recipientType='user'"),
+    recipientTelegramUserId: z
+      .string()
+      .optional()
+      .describe("telegramUserId khi recipientType='telegram_user'"),
     recipientRole: z
       .enum(ROLE_VALUES)
       .optional()
-      .describe(
-        "Role khi recipientType='role'. Hợp lệ: admin, manager, recruiter, trainer, visa_specialist, accountant, medical",
-      ),
+      .describe("Role khi recipientType='role'"),
     description: z.string().optional().describe("Mô tả thêm context (vài câu)"),
     relatedOrderId: z.string().optional().describe("Liên kết đơn tuyển nếu có"),
     relatedWorkerId: z.string().optional().describe("Liên kết LĐ nếu có"),
@@ -111,8 +125,11 @@ trong system prompt.`,
   async (args) => {
     if (args.recipientType === "user" && !args.recipientUser) {
       return err(
-        "Thiếu recipientUser. Nếu chưa biết user ID, hỏi user xác nhận họ là ai (qua list_workers/list orders cũng không lấy được — cần user trong collection users).",
+        "Thiếu recipientUser khi recipientType='user'. Dùng list_users/get_user để lấy id, hoặc đổi sang recipientType='telegram_user' nếu chỉ có telegramUserId.",
       );
+    }
+    if (args.recipientType === "telegram_user" && !args.recipientTelegramUserId) {
+      return err("Thiếu recipientTelegramUserId khi recipientType='telegram_user'.");
     }
     if (args.recipientType === "role" && !args.recipientRole) {
       return err("Thiếu recipientRole khi recipientType='role'.");
@@ -125,6 +142,8 @@ trong system prompt.`,
         status: "pending",
       };
       if (args.recipientUser) body.recipientUser = args.recipientUser;
+      if (args.recipientTelegramUserId)
+        body.recipientTelegramUserId = args.recipientTelegramUserId;
       if (args.recipientRole) body.recipientRole = args.recipientRole;
       if (args.description) body.description = args.description;
       if (args.relatedOrderId) body.relatedOrder = args.relatedOrderId;
@@ -205,8 +224,9 @@ const update_reminder = tool(
     id: z.string().describe("Reminder ID"),
     title: z.string().optional(),
     dueAt: z.string().optional(),
-    recipientType: z.enum(["user", "role"]).optional(),
+    recipientType: z.enum(["user", "telegram_user", "role"]).optional(),
     recipientUser: z.string().optional(),
+    recipientTelegramUserId: z.string().optional(),
     recipientRole: z.enum(ROLE_VALUES).optional(),
     description: z.string().optional(),
   },

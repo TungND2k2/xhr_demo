@@ -49,6 +49,17 @@ export interface PipelineInput {
   /** Lịch sử cuộc trò chuyện (last N turns trong cùng chatId).
    *  Stateless pipeline — caller giữ history. */
   priorMessages?: PriorMessage[];
+  /** Người đang chat với bot ngay lúc này — bot cần để biết "tôi" là ai
+   *  (vd "nhắc tôi 9h" → recipientType="user", recipientUser=...). */
+  currentChatter?: {
+    telegramUserId: number;
+    username?: string;
+    firstName?: string;
+    lastName?: string;
+    chatId: number;
+    chatType: string;
+    chatTitle?: string;
+  };
   /** Optional callback fired each time Claude calls a tool. Receives raw args
    *  để caller có thể format mô tả thân thiện hiển thị cho user. */
   onToolCall?: (toolName: string, args: Record<string, unknown>) => void;
@@ -174,11 +185,39 @@ export async function runPipeline(input: PipelineInput): Promise<PipelineOutput>
     logger.warn(tag, `⏱ Timeout after ${PIPELINE_TIMEOUT_MS}ms — aborting`);
   }, PIPELINE_TIMEOUT_MS);
 
-  // Inject thời gian hiện tại để AI parse "9h sáng mai" / "thứ 6" → ISO.
-  // Vietnam tz (+07:00) là chuẩn doanh nghiệp; nếu sau này deploy server khác
-  // có thể đọc từ env TZ.
+  // Inject thời gian hiện tại + người đang chat. AI cần cả hai để parse
+  // "nhắc tôi 9h sáng mai" → ISO datetime + đúng người nhận.
   const nowIso = new Date().toISOString();
-  const dynamicSystemPrompt = `${SYSTEM_PROMPT}\n\n## Thời gian hệ thống\nThời gian hiện tại (UTC): ${nowIso}\nTimezone doanh nghiệp: Asia/Ho_Chi_Minh (UTC+7).\nKhi user nói "sáng mai", "thứ 6 9h", "3 ngày nữa" → tự suy ra ISO 8601 với offset +07:00.`;
+  const nowVN = new Date(Date.now() + 7 * 3600_000).toISOString().replace("Z", "+07:00");
+  const chatter = input.currentChatter;
+  let chatterBlock = "";
+  if (chatter) {
+    const nameLine = [chatter.firstName, chatter.lastName].filter(Boolean).join(" ").trim();
+    chatterBlock = [
+      "## Người đang chat với bạn",
+      `- telegramUserId: \`${chatter.telegramUserId}\``,
+      `- username: ${chatter.username ? "@" + chatter.username : "(không có)"}`,
+      `- tên: ${nameLine || "(không có)"}`,
+      `- chatId hiện tại: \`${chatter.chatId}\` (${chatter.chatType}${chatter.chatTitle ? ` "${chatter.chatTitle}"` : ""})`,
+      "",
+      "Khi user nói 'nhắc tôi', 'cho tôi xem', 'của tôi'... → 'tôi' là người này. Lookup",
+      "system user qua `lookup_telegram_user({telegramUserId:'<id>'})` rồi lấy",
+      "`linkedSystemUser` để dùng làm recipientUser cho reminder. Nếu chưa link",
+      "thì bảo user nhờ admin link, hoặc tạo reminder không có recipientUser cụ thể",
+      "(admin sẽ thấy trong portal).",
+    ].join("\n");
+  }
+
+  const dynamicSystemPrompt = [
+    SYSTEM_PROMPT,
+    "",
+    "## Thời gian hệ thống",
+    `Thời gian hiện tại (UTC): ${nowIso}`,
+    `Thời gian VN (UTC+7): ${nowVN}`,
+    `Timezone doanh nghiệp: Asia/Ho_Chi_Minh (UTC+7).`,
+    `Khi user nói "sáng mai", "thứ 6 9h", "3 ngày nữa", "1 phút nữa" → tự suy ra ISO 8601 với offset +07:00. KHÔNG hỏi user "mấy giờ rồi".`,
+    chatterBlock ? "\n" + chatterBlock : "",
+  ].join("\n");
 
   try {
     const q = query({

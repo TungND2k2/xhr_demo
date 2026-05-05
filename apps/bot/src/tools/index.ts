@@ -11,6 +11,8 @@ import { workflowStageTools } from "./workflow-stages.tools.js";
 import { formTools } from "./forms.tools.js";
 import { mediaTools } from "./media.tools.js";
 import { reminderTools } from "./reminders.tools.js";
+import { userTools } from "./users.tools.js";
+import { telegramIdentityTools } from "./telegram-identity.tools.js";
 
 import { advanceOrderStatus } from "./orders.workflow.js";
 import { orderProgressSummary } from "./orders.summary.js";
@@ -32,6 +34,12 @@ export const allTools = [
 
   // Reminders — lịch nhắc tự do (CEO/team).
   ...reminderTools,         // 5: create/list/update/snooze/dismiss
+
+  // System users (read-only).
+  ...userTools,             // 2: list_users, get_user
+
+  // Telegram identity registry — map @username → telegramUserId, group info.
+  ...telegramIdentityTools, // 3: lookup_telegram_user, list_telegram_groups, list_group_members
 
   // Domain-specific.
   advanceOrderStatus,
