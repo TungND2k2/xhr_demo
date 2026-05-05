@@ -132,6 +132,12 @@ trong system prompt — KHÔNG hỏi user mấy giờ.`,
       .optional()
       .describe("Role khi recipientType='role'"),
     description: z.string().optional().describe("Mô tả thêm context (vài câu)"),
+    mentionTelegramUserIds: z
+      .array(z.string())
+      .optional()
+      .describe(
+        "List telegramUserId để tag/mention khi reminder bắn vào group (user được ping). Khi user nói 'nhắc tôi' trong group → đưa telegramUserId của họ vào đây để họ thấy notification.",
+      ),
     relatedOrderId: z.string().optional().describe("Liên kết đơn tuyển nếu có"),
     relatedWorkerId: z.string().optional().describe("Liên kết LĐ nếu có"),
   },
@@ -165,6 +171,11 @@ trong system prompt — KHÔNG hỏi user mấy giờ.`,
         body.recipientTelegramUserId = args.recipientTelegramUserId;
       if (args.recipientRole) body.recipientRole = args.recipientRole;
       if (args.description) body.description = args.description;
+      if (args.mentionTelegramUserIds && args.mentionTelegramUserIds.length > 0) {
+        body.mentionTelegramUserIds = args.mentionTelegramUserIds.map((id) => ({
+          telegramUserId: id,
+        }));
+      }
       if (args.relatedOrderId) body.relatedOrder = args.relatedOrderId;
       if (args.relatedWorkerId) body.relatedWorker = args.relatedWorkerId;
 

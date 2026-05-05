@@ -165,6 +165,24 @@ export const Reminders: CollectionConfig = {
       ],
     },
     {
+      name: "mentionTelegramUserIds",
+      label: "Tag người (Telegram User ID)",
+      type: "array",
+      labels: { singular: "Mention", plural: "Mentions" },
+      admin: {
+        description:
+          "Khi reminder bắn vào group, bot sẽ prepend @mention các user này để họ được ping. Mỗi item là 1 telegramUserId dạng số.",
+      },
+      fields: [
+        {
+          name: "telegramUserId",
+          label: "Telegram User ID",
+          type: "text",
+          required: true,
+        },
+      ],
+    },
+    {
       name: "snoozeUntil",
       label: "Tạm hoãn tới",
       type: "date",

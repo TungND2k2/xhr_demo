@@ -32,10 +32,20 @@ interface ReminderDoc {
   recipientUser?: string | UserDoc;
   recipientRole?: string;
   recipientTelegramUserId?: string;
+  mentionTelegramUserIds?: Array<{ telegramUserId: string }>;
   status: "pending" | "sent" | "dismissed";
   snoozeUntil?: string;
   relatedOrder?: string | { id: string; orderCode?: string };
   relatedWorker?: string | { id: string; workerCode?: string };
+}
+
+interface TelegramUserRow {
+  id: string;
+  telegramUserId: string;
+  username?: string;
+  firstName?: string;
+  lastName?: string;
+  displayName?: string;
 }
 
 interface PayloadFindResponse<T> {
@@ -62,8 +72,52 @@ function fmtRelated(rem: ReminderDoc): string {
   return bits.length > 0 ? `\n${bits.join(" · ")}` : "";
 }
 
-function buildMessage(rem: ReminderDoc): string {
-  const lines: string[] = [`🔔 *${rem.title}*`];
+/**
+ * Build mention prefix từ list telegramUserIds. Lookup TelegramUsers để
+ * lấy username/displayName. Nếu user có @username → dùng plain `@username`
+ * (Telegram tự auto-link + ping). Nếu không có username → dùng markdown
+ * link `[Tên](tg://user?id=ID)` — mdToTelegramHtml sẽ chuyển thành thẻ
+ * <a> mà Telegram parse_mode=HTML hiểu được, vẫn ping được user.
+ */
+async function buildMentionPrefix(
+  ids: Array<{ telegramUserId: string }> | undefined,
+): Promise<string> {
+  if (!ids || ids.length === 0) return "";
+  const parts: string[] = [];
+  for (const item of ids) {
+    const tgId = item.telegramUserId;
+    if (!tgId) continue;
+    try {
+      const res = await payload.request<PayloadFindResponse<TelegramUserRow>>(
+        `/api/telegram-users`,
+        {
+          query: {
+            where: { telegramUserId: { equals: tgId } },
+            limit: 1,
+            depth: 0,
+          },
+        },
+      );
+      const u = res.docs[0];
+      if (u?.username) {
+        parts.push(`@${u.username}`);
+      } else {
+        const name = u?.displayName ?? `User ${tgId}`;
+        parts.push(`[${name}](tg://user?id=${tgId})`);
+      }
+    } catch {
+      // Lookup fail → vẫn ping được qua tg://user link
+      parts.push(`[User ${tgId}](tg://user?id=${tgId})`);
+    }
+  }
+  return parts.join(" ");
+}
+
+async function buildMessage(rem: ReminderDoc): Promise<string> {
+  const mentionPrefix = await buildMentionPrefix(rem.mentionTelegramUserIds);
+  const lines: string[] = [];
+  if (mentionPrefix) lines.push(mentionPrefix, "");
+  lines.push(`🔔 *${rem.title}*`);
   if (rem.description?.trim()) lines.push("", rem.description.trim());
   const related = fmtRelated(rem);
   if (related) lines.push(related);
@@ -176,7 +230,7 @@ export async function runUserReminders({
       if (rem.snoozeUntil && rem.snoozeUntil > nowIso) continue;
 
       const targets = await resolveChatTargets(rem);
-      const text = buildMessage(rem);
+      const text = await buildMessage(rem);
 
       if (targets.length === 0 && adminChatId) {
         await telegram.sendMessage(adminChatId, `[fallback] ${text}`);
