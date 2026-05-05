@@ -40,6 +40,17 @@ export const Media: CollectionConfig = {
   },
   fields: [
     {
+      // UI field thuần (không lưu DB) — render iframe khi file là PDF.
+      // Đặt đầu danh sách để hiện ngay sau upload block.
+      name: "pdfPreview",
+      type: "ui",
+      admin: {
+        components: {
+          Field: "/components/admin/MediaPdfPreview",
+        },
+      },
+    },
+    {
       name: "alt",
       label: "Tên / nhãn ngắn",
       type: "text",
