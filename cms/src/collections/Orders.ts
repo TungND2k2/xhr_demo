@@ -123,6 +123,54 @@ export const Orders: CollectionConfig = {
                 },
               ],
             },
+            // Nghiệp đoàn / broker — thường là tổ chức trung gian giữa
+            // công ty XKLĐ và xí nghiệp (đặc biệt thị trường Nhật).
+            {
+              type: "row",
+              fields: [
+                {
+                  name: "brokerAgency",
+                  label: "Nghiệp đoàn / Broker",
+                  type: "text",
+                  admin: {
+                    width: "67%",
+                    description: "Tên nghiệp đoàn trung gian (vd: 'Hiệp hội XYZ Cooperative')",
+                  },
+                },
+                {
+                  name: "brokerAgencyContact",
+                  label: "SĐT nghiệp đoàn",
+                  type: "text",
+                  admin: { width: "33%" },
+                },
+              ],
+            },
+            // Hợp đồng cung ứng lao động (HĐCU) ký giữa công ty XKLĐ ↔
+            // đối tác/nghiệp đoàn. Khác `contracts` collection (HĐ ký với
+            // worker cá nhân) — đây là HĐ ở cấp đơn tuyển.
+            {
+              type: "row",
+              fields: [
+                {
+                  name: "contractNumber",
+                  label: "Số HĐCU",
+                  type: "text",
+                  admin: {
+                    width: "50%",
+                    description: "Số hợp đồng cung ứng (vd: 01/03/2026/DKHD-TDTL)",
+                  },
+                },
+                {
+                  name: "contractDate",
+                  label: "Ngày ký HĐCU",
+                  type: "date",
+                  admin: {
+                    width: "50%",
+                    date: { pickerAppearance: "dayOnly", displayFormat: "dd/MM/yyyy" },
+                  },
+                },
+              ],
+            },
 
             {
               type: "row",
@@ -291,6 +339,50 @@ export const Orders: CollectionConfig = {
               name: "notes",
               label: "Ghi chú",
               type: "textarea",
+            },
+            // Thuộc tính linh hoạt — AI dùng để lưu info đặc thù không có
+            // trong schema chính (vd: "Phụ cấp ăn", "Yêu cầu visa loại E-9",
+            // "Bảo hiểm tai nạn", "Nhà ở miễn phí", "Phí môi giới Nhật Bản"...).
+            // Schema-less + searchable theo `key` hoặc `value`.
+            {
+              name: "attributes",
+              label: "Thuộc tính bổ sung",
+              type: "array",
+              labels: { singular: "Thuộc tính", plural: "Thuộc tính" },
+              admin: {
+                description:
+                  "Lưu thông tin chi tiết không có cột riêng. AI tự fill khi đọc YCTD/HĐ. Mỗi item: key (tên), value (giá trị), note (mô tả thêm).",
+              },
+              fields: [
+                {
+                  type: "row",
+                  fields: [
+                    {
+                      name: "key",
+                      label: "Tên thuộc tính",
+                      type: "text",
+                      required: true,
+                      admin: {
+                        width: "30%",
+                        placeholder: "vd: Phụ cấp ăn, Loại visa, Bảo hiểm",
+                      },
+                    },
+                    {
+                      name: "value",
+                      label: "Giá trị",
+                      type: "text",
+                      required: true,
+                      admin: { width: "40%" },
+                    },
+                    {
+                      name: "note",
+                      label: "Ghi chú",
+                      type: "text",
+                      admin: { width: "30%" },
+                    },
+                  ],
+                },
+              ],
             },
           ],
         },

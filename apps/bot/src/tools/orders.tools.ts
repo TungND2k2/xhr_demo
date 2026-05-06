@@ -32,6 +32,10 @@ export const orderTools = createCrudTools({
     employerCountry: z.string().optional(),
     employerContact: z.string().optional(),
     employerEmail: z.string().email().optional(),
+    brokerAgency: z.string().optional().describe("Tên nghiệp đoàn / broker trung gian"),
+    brokerAgencyContact: z.string().optional().describe("SĐT nghiệp đoàn"),
+    contractNumber: z.string().optional().describe("Số HĐCU (Hợp đồng cung ứng)"),
+    contractDate: z.string().optional().describe("Ngày ký HĐCU YYYY-MM-DD"),
     position: z.string().describe("Vị trí / nghề tuyển"),
     quantityNeeded: z.number().int().positive().describe("Số lượng cần tuyển"),
     contractDurationMonths: z.number().int().positive().optional(),
@@ -49,5 +53,17 @@ export const orderTools = createCrudTools({
     depositRequired: z.number().nonnegative().optional(),
     status: z.enum(ORDER_STATUSES).optional(),
     notes: z.string().optional(),
+    attributes: z
+      .array(
+        z.object({
+          key: z.string().describe("Tên thuộc tính, vd 'Phụ cấp ăn', 'Loại visa', 'Bảo hiểm'"),
+          value: z.string().describe("Giá trị"),
+          note: z.string().optional().describe("Ghi chú thêm nếu cần"),
+        }),
+      )
+      .optional()
+      .describe(
+        "Thuộc tính bổ sung không có cột riêng. Dùng khi đọc YCTD/HĐ thấy info quan trọng nhưng không match schema (vd: phụ cấp, loại visa, bảo hiểm, điều khoản đặc biệt). Mỗi item là 1 cặp key-value.",
+      ),
   },
 });
