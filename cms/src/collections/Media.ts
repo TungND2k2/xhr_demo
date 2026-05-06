@@ -36,7 +36,9 @@ export const Media: CollectionConfig = {
       ["admin", "manager"].includes(user?.role ?? ""),
   },
   upload: {
-    mimeTypes: ["image/*", "application/pdf", "application/*"],
+    // image/* + application/* (PDF, Office, ZIP...) đã có sẵn.
+    // text/* để AI export được CSV/MD/TXT, application/json cho JSON dump.
+    mimeTypes: ["image/*", "application/pdf", "application/*", "text/*"],
   },
   fields: [
     {

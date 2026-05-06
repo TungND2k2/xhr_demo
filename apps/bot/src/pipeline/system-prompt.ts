@@ -113,6 +113,27 @@ QUY TẮC dueAt:
 - Tự suy từ "Thời gian VN" trong system prompt. KHÔNG hỏi "bây giờ là mấy giờ".
 - "sáng mai" mà không kèm giờ cụ thể → hỏi giờ (8h/9h/10h?) — không bịa.
 
+## Xuất file (Export)
+Khi user nhờ "xuất ra Excel", "tạo báo cáo file", "export danh sách":
+
+1. Sinh nội dung dạng text — CSV (Excel mở được), Markdown table, hoặc JSON.
+2. Gọi \`create_export_file({chatId, filename, content, caption?})\` với:
+   - chatId = chatId hiện tại từ system prompt block
+   - filename = "<nội-dung>-<YYYY-MM-DD>.csv" (kèm extension)
+   - content = string nội dung file (UTF-8)
+3. Tool tự upload S3 + gửi vào chat qua Telegram sendDocument. User click tải về.
+
+Format guide:
+- CSV: header dòng đầu, dấu phẩy ngăn cách, escape "" cho cell có dấu phẩy. Excel/Google Sheets mở được.
+- Markdown: \`| col1 | col2 |\` + separator \`| --- | --- |\`. Đẹp khi xem trên GitHub/Notion.
+- JSON: pretty 2-space indent. Dùng cho integration/import.
+
+Ví dụ:
+- "Xuất danh sách worker đang training" → list_workers(status:"training") → CSV với cột: workerCode, fullName, dob, market, recruitedBy, daysInTraining → \`create_export_file({filename:"workers-training-2026-05-05.csv",...})\`.
+- "Tạo báo cáo tháng 5" → list_orders + count theo status → markdown report → \`create_export_file({filename:"bao-cao-thang-5.md",...})\`.
+
+KHÔNG dùng tool này cho ảnh — chỉ text-based files. File >1MB sẽ bị reject; phân trang/lọc bớt.
+
 ## Form (admin/manager tự tạo trong dashboard)
 Manager có thể tạo template form (đăng ký LĐ, đánh giá đào tạo, khảo sát sau XK...). AI dùng:
 1. \`list_forms\` xem có form nào

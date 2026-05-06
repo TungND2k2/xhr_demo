@@ -13,6 +13,7 @@ import { mediaTools } from "./media.tools.js";
 import { reminderTools } from "./reminders.tools.js";
 import { userTools } from "./users.tools.js";
 import { telegramIdentityTools } from "./telegram-identity.tools.js";
+import { exportTools } from "./export.tools.js";
 
 import { advanceOrderStatus } from "./orders.workflow.js";
 import { orderProgressSummary } from "./orders.summary.js";
@@ -40,6 +41,9 @@ export const allTools = [
 
   // Telegram identity registry — map @username → telegramUserId, group info.
   ...telegramIdentityTools, // 3: lookup_telegram_user, list_telegram_groups, list_group_members
+
+  // Export — AI sinh file CSV/MD/JSON/TXT, upload S3 + gửi Telegram.
+  ...exportTools,           // 1: create_export_file
 
   // Domain-specific.
   advanceOrderStatus,
