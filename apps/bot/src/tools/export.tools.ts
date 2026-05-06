@@ -13,6 +13,7 @@
  */
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { tool } from "@anthropic-ai/claude-agent-sdk";
+import ExcelJS from "exceljs";
 import { z } from "zod";
 
 import { payload, PayloadError } from "../payload/client.js";
@@ -187,4 +188,176 @@ KHÔNG dùng tool này cho:
   },
 );
 
-export const exportTools: AnyTool[] = [create_export_file as AnyTool];
+/**
+ * Tool xuất file Excel (.xlsx) — AI cung cấp data dạng cấu trúc:
+ *   sheets: [{ name, headers: ["Cột 1", "Cột 2"], rows: [["a", 1], ...] }]
+ * Mỗi sheet 1 worksheet trong workbook. Server dùng ExcelJS chuyển thành
+ * file .xlsx UTF-8 đầy đủ tiếng Việt + format cơ bản (header bold).
+ */
+async function buildXlsxBuffer(
+  sheets: Array<{
+    name: string;
+    headers: string[];
+    rows: Array<Array<string | number | boolean | null>>;
+  }>,
+): Promise<Buffer> {
+  const wb = new ExcelJS.Workbook();
+  wb.creator = "xHR-bot";
+  wb.created = new Date();
+
+  for (const sheet of sheets) {
+    const ws = wb.addWorksheet(sheet.name.slice(0, 31) || "Sheet"); // Excel max 31 chars
+    if (sheet.headers.length > 0) {
+      const headerRow = ws.addRow(sheet.headers);
+      headerRow.font = { bold: true };
+      headerRow.fill = {
+        type: "pattern",
+        pattern: "solid",
+        fgColor: { argb: "FFE0E0E0" },
+      };
+      // Auto width: header length + 2 padding
+      ws.columns = sheet.headers.map((h) => ({
+        width: Math.max(h.length + 2, 12),
+      }));
+    }
+    for (const row of sheet.rows) {
+      ws.addRow(row);
+    }
+    // Freeze header row + auto filter
+    if (sheet.headers.length > 0) {
+      ws.views = [{ state: "frozen", ySplit: 1 }];
+      ws.autoFilter = {
+        from: { row: 1, column: 1 },
+        to: { row: 1, column: sheet.headers.length },
+      };
+    }
+  }
+
+  // ExcelJS trả ArrayBuffer-like, convert sang Buffer
+  const arrayBuffer = await wb.xlsx.writeBuffer();
+  return Buffer.from(arrayBuffer as ArrayBuffer);
+}
+
+const create_xlsx_file = tool(
+  "create_xlsx_file",
+  `Sinh file Excel (.xlsx) thật từ data cấu trúc và GỬI THẲNG vào chat
+Telegram + lưu media (S3). Khác create_export_file (chỉ text), tool này
+nhận structured data → ExcelJS sinh xlsx binary với format đẹp:
+- Header in đậm + nền xám
+- Auto width cột theo độ dài header
+- Freeze panes ở dòng 1
+- Auto filter dropdown
+
+Workflow:
+1. Bạn (AI) gọi data tools cần thiết (list_workers, list_orders, ...)
+2. Format thành \`sheets: [{name, headers, rows}]\`. Mỗi sheet là 1 tab
+   trong workbook. Tên sheet ≤ 31 ký tự.
+3. Gọi tool này. Tool sẽ encode → upload S3 → sendDocument vào chat.
+
+Khi nào dùng xlsx (vs create_export_file CSV):
+- xlsx: nhiều sheet (đa chiều), số liệu/ngày tháng cần format, user thực sự dùng Excel
+- CSV (create_export_file): nhanh, đơn giản, ≤ 1 bảng phẳng
+
+Ví dụ:
+- "Xuất báo cáo tháng 5: workers + orders + contracts" → 3 sheets trong 1 file
+- "Danh sách worker đang training" → 1 sheet
+- "Đối chiếu phí dịch vụ Q2" → 1 sheet với cột số tiền`,
+  {
+    chatId: z.string().describe("Telegram chatId hiện tại từ system prompt"),
+    filename: z
+      .string()
+      .min(1)
+      .describe('Tên file kèm extension .xlsx, vd "bao-cao-thang-5.xlsx"'),
+    sheets: z
+      .array(
+        z.object({
+          name: z.string().describe("Tên sheet/tab (≤ 31 ký tự)"),
+          headers: z.array(z.string()).describe("Tên các cột — dòng đầu"),
+          rows: z
+            .array(
+              z.array(
+                z.union([
+                  z.string(),
+                  z.number(),
+                  z.boolean(),
+                  z.null(),
+                ]),
+              ),
+            )
+            .describe("Mảng các dòng data, mỗi dòng = mảng cell theo thứ tự headers"),
+        }),
+      )
+      .min(1)
+      .describe("Danh sách sheets (workbook có thể có nhiều tab)"),
+    caption: z.string().optional().describe("Caption hiển thị dưới file (tối đa 1024)"),
+  },
+  async ({ chatId, filename, sheets, caption }) => {
+    if (!filename.toLowerCase().endsWith(".xlsx")) {
+      filename = filename.replace(/\.[^.]*$/, "") + ".xlsx";
+    }
+    const totalRows = sheets.reduce((s, sh) => s + sh.rows.length, 0);
+    if (totalRows > 50_000) {
+      return err(
+        `Tổng ${totalRows} dòng > 50k — quá nặng. Phân nhỏ thành nhiều file hoặc paginate.`,
+      );
+    }
+
+    let buffer: Buffer;
+    try {
+      buffer = await buildXlsxBuffer(sheets);
+    } catch (e) {
+      return err(`Sinh xlsx thất bại: ${e instanceof Error ? e.message : e}`);
+    }
+
+    const mt =
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+
+    // Upload Payload (S3)
+    let mediaId: string | null = null;
+    try {
+      const media = await payload.uploadMedia({
+        buffer,
+        filename,
+        mimeType: mt,
+        alt: `Xlsx export tới chat ${chatId}`,
+      });
+      mediaId = media.id;
+      void payload
+        .request(`/api/media/${encodeURIComponent(media.id)}`, {
+          method: "PATCH",
+          body: {
+            uploadedFrom: "api",
+            kind: "other",
+            description:
+              `File Excel ${filename} do bot tạo — ` +
+              `${sheets.length} sheet, ${totalRows} dòng tổng (${(buffer.length / 1024).toFixed(1)}KB)`,
+          },
+        })
+        .catch((e) => logger.warn("Export", `metadata PATCH xlsx#${media.id} failed: ${e}`));
+      logger.info(
+        "Export",
+        `Uploaded xlsx ${filename} → media#${media.id} (${sheets.length}s/${totalRows}r/${(buffer.length / 1024).toFixed(1)}KB)`,
+      );
+    } catch (e) {
+      const reason = e instanceof PayloadError ? e.message : String(e);
+      logger.warn("Export", `Payload xlsx upload failed: ${reason}`);
+    }
+
+    // Gửi qua Telegram
+    const send = await sendTelegramDocument(chatId, filename, buffer, mt, caption);
+    if (!send.ok) {
+      return err(
+        `Đã upload media${mediaId ? ` #${mediaId}` : ""} nhưng gửi Telegram thất bại: ${send.error}`,
+      );
+    }
+
+    return ok(
+      `✅ Đã gửi file Excel **${filename}** (${sheets.length} sheet, ${totalRows} dòng, ${(buffer.length / 1024).toFixed(1)}KB)${mediaId ? ` — lưu media#${mediaId}` : ""}.`,
+    );
+  },
+);
+
+export const exportTools: AnyTool[] = [
+  create_export_file as AnyTool,
+  create_xlsx_file as AnyTool,
+];
