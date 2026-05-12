@@ -4,7 +4,7 @@
 
 ---
 
-## 1. Tóm gọn 1 hình
+## 1. Flow chính khi dùng multi-agent
 
 ```mermaid
 flowchart TD
@@ -59,7 +59,7 @@ flowchart TD
 
 ---
 
-## 3. Cấu trúc 1 phòng ban — ví dụ Phòng Nhật
+## 3. Cấu trúc 1 phòng ban (ví dụ Phòng Nhật)
 
 ```mermaid
 flowchart LR
@@ -110,7 +110,7 @@ Mỗi phòng (Nhật / Hàn / Đài / Đức...) đều có cấu trúc giống 
 
 ---
 
-## 5. Flow xử lý 1 use case — "Tạo LĐ mới đến khi đỗ thi tuyển"
+## 5. Flow xử lý 1 use case (tạo LĐ mới đến khi đỗ thi tuyển)
 
 ```mermaid
 sequenceDiagram
@@ -178,7 +178,7 @@ stateDiagram-v2
 
 ---
 
-## 7. Setup Telegram — chuẩn bị 1 lần
+## 7. Setup Telegram (chuẩn bị 1 lần)
 
 ```mermaid
 flowchart LR
@@ -215,7 +215,7 @@ Admin Telegram restrict ai post topic nào:
 
 ---
 
-## 8. Cách bot xử lý dưới mui xe
+## 8. Cách bot xử lý phía sau
 
 ```mermaid
 flowchart TD
@@ -243,7 +243,7 @@ flowchart TD
 
 ---
 
-## 9. So sánh với phương án Portal (web app)
+## 9. So sánh với phương án Portal
 
 | Tiêu chí | Portal (web app) | Multi-agent qua Telegram |
 |---|---|---|
@@ -290,7 +290,7 @@ gantt
 
 ---
 
-## 11. Điều cần TLG quyết trước khi build
+## 11. Điều TLG cần quyết trước khi build
 
 | Câu hỏi | Cần TLG trả lời |
 |---|---|
