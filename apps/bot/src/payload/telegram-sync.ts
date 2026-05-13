@@ -60,41 +60,57 @@ interface AgentRow {
   name?: string;
   displayName?: string;
   docs?: string;
-  /** Schema mới: object grouped theo category, mỗi field là string[].
-   *  Legacy schema: string[] phẳng (giữ tương thích đến hết PoC). */
+  /** 3 schema được support cùng lúc:
+   *   1. Legacy: string[] phẳng — agent cũ trước multi-agent
+   *   2. Phase 1 multi-agent: { group: string[] } — select hasMany
+   *   3. Hiện tại (checkbox): { group: { toolName: boolean } } */
   enabledTools?:
     | string[]
-    | {
-        workers?: string[];
-        orders?: string[];
-        orderWorkers?: string[];
-        contracts?: string[];
-        workflowStages?: string[];
-        forms?: string[];
-        media?: string[];
-        reminders?: string[];
-        users?: string[];
-        telegramIdentity?: string[];
-        exports?: string[];
-        calendars?: string[];
-        assets?: string[];
-        email?: string[];
-      };
+    | Record<string, string[] | Record<string, boolean>>;
   active?: boolean;
 }
 
-/** Flatten enabledTools — group object → single string[]. Hoặc nếu đã
- *  là array (legacy schema) thì return luôn. */
+/** Một số tool có dấu `-` trong tên runtime (vd "list_order-workers"),
+ *  nhưng Payload field name không cho phép `-`. Admin tick với tên `_`,
+ *  runtime cần convert ngược. */
+const TOOL_NAME_ALIASES: Record<string, string> = {
+  list_order_workers: "list_order-workers",
+  get_order_workers: "get_order-workers",
+  create_order_workers: "create_order-workers",
+  update_order_workers: "update_order-workers",
+  delete_order_workers: "delete_order-workers",
+  list_workflow_stages: "list_workflow-stages",
+  get_workflow_stages: "get_workflow-stages",
+  create_workflow_stages: "create_workflow-stages",
+  update_workflow_stages: "update_workflow-stages",
+};
+
+function resolveToolName(name: string): string {
+  return TOOL_NAME_ALIASES[name] ?? name;
+}
+
+/** Flatten enabledTools sang string[] tools enabled, hỗ trợ cả 3 schema. */
 function flattenEnabledTools(
   raw: AgentRow["enabledTools"],
 ): string[] | undefined {
   if (!raw) return undefined;
-  if (Array.isArray(raw)) return raw;
+
+  // Schema 1: legacy flat array
+  if (Array.isArray(raw)) return raw.map(resolveToolName);
+
   const out: string[] = [];
-  for (const key of Object.keys(raw) as Array<keyof typeof raw>) {
-    const v = raw[key];
-    if (Array.isArray(v)) out.push(...v);
+  for (const groupValue of Object.values(raw)) {
+    if (Array.isArray(groupValue)) {
+      // Schema 2: select hasMany — array of tool names
+      for (const name of groupValue) out.push(resolveToolName(name));
+    } else if (groupValue && typeof groupValue === "object") {
+      // Schema 3: checkbox group — { toolName: boolean }
+      for (const [name, enabled] of Object.entries(groupValue)) {
+        if (enabled === true) out.push(resolveToolName(name));
+      }
+    }
   }
+
   return out.length > 0 ? out : undefined;
 }
 
