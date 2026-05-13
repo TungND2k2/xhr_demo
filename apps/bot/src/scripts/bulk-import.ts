@@ -174,7 +174,9 @@ async function processFile(
       `  📋 parsed: date=${meta.signedDate ?? "?"}, employer="${meta.employer}", program=${meta.programType}`,
     );
 
-    // 1. Check duplicate Media — skip nếu đã tồn tại
+    // 1. Find Media by filename — reuse nếu đã có, upload mới nếu chưa
+    let mediaId: string;
+    let mediaWasNew = false;
     const existing = await payload.request<{ docs: Array<{ id: string }> }>(
       `/api/media`,
       {
@@ -186,42 +188,43 @@ async function processFile(
       },
     );
     if (existing.docs.length > 0) {
-      logger.info(
-        "Import",
-        `  ⊘ media đã tồn tại (#${existing.docs[0].id}) — skip toàn bộ`,
-      );
-      stats.skipped += 1;
-      return;
+      mediaId = existing.docs[0].id;
+      logger.info("Import", `  ↻ media đã tồn tại (#${mediaId}) — reuse`);
+    } else {
+      const media = (await payload.uploadMedia({
+        buffer,
+        filename,
+        mimeType,
+        alt: meta.employer
+          ? `HĐCU TLG - ${meta.employer}${meta.signedDate ? " - " + meta.signedDate : ""}`
+          : filename,
+      })) as UploadedMedia;
+      mediaId = media.id;
+      mediaWasNew = true;
+      stats.mediaCreated += 1;
+      logger.info("Import", `  ↑ uploaded → media#${mediaId}`);
     }
 
-    // 2. Upload qua Payload (auto vào S3)
-    const media = (await payload.uploadMedia({
-      buffer,
-      filename,
-      mimeType,
-      alt: meta.employer
-        ? `HĐCU TLG - ${meta.employer}${meta.signedDate ? " - " + meta.signedDate : ""}`
-        : filename,
-    })) as UploadedMedia;
-    stats.mediaCreated += 1;
-    logger.info("Import", `  ↑ uploaded → media#${media.id}`);
-
-    // 3. Extract text — MarkItDown
+    // 3. Extract text — MarkItDown (chỉ chạy khi media mới)
     let extractedText = "";
     let extractionMethod = "markitdown";
     let visionDescription: string | null = null;
     let visionKind: string | null = null;
 
-    try {
-      extractedText = await convertToMarkdown(buffer, filename);
-      logger.info("Import", `  📄 MarkItDown → ${extractedText.length} chars`);
-    } catch (err) {
-      const reason = err instanceof MarkItDownError ? err.message : String(err);
-      logger.warn("Import", `  ⚠️ MarkItDown failed: ${reason}`);
+    if (mediaWasNew) {
+      try {
+        extractedText = await convertToMarkdown(buffer, filename);
+        logger.info("Import", `  📄 MarkItDown → ${extractedText.length} chars`);
+      } catch (err) {
+        const reason = err instanceof MarkItDownError ? err.message : String(err);
+        logger.warn("Import", `  ⚠️ MarkItDown failed: ${reason}`);
+      }
+    } else {
+      logger.info("Import", `  ⊘ skip extract (media reused)`);
     }
 
-    // 4. PDF scan fallback — vision OCR
-    if (extractedText.trim().length < 50 && mimeType === "application/pdf") {
+    // 4. PDF scan fallback — vision OCR (chỉ khi media mới + có text < 50)
+    if (mediaWasNew && extractedText.trim().length < 50 && mimeType === "application/pdf") {
       try {
         logger.info("Import", `  👁 PDF scan — falling back to vision OCR (5 pages)...`);
         const pages = await pdfToImages(buffer, { maxPages: 5, dpi: 150 });
@@ -245,32 +248,37 @@ async function processFile(
       }
     }
 
-    // 5. PATCH metadata cho Media
-    const shortText = extractedText.replace(/\s+/g, " ").trim().slice(0, 300);
-    const mediaDescription =
-      visionDescription ??
-      [
-        `HĐCU TLG - ${meta.employer}`,
-        meta.signedDate ? `Ký ngày ${meta.signedDate}` : null,
-        `Chương trình ${meta.programType}`,
-        shortText ? `Trích nội dung: ${shortText}${extractedText.length > 300 ? "..." : ""}` : null,
-      ]
-        .filter(Boolean)
-        .join(". ");
+    // 5. PATCH metadata cho Media (chỉ khi mới upload — tránh đè description
+    //    đã có nếu chạy lại)
+    if (mediaWasNew) {
+      const shortText = extractedText.replace(/\s+/g, " ").trim().slice(0, 300);
+      const mediaDescription =
+        visionDescription ??
+        [
+          `HĐCU TLG - ${meta.employer}`,
+          meta.signedDate ? `Ký ngày ${meta.signedDate}` : null,
+          `Chương trình ${meta.programType}`,
+          shortText
+            ? `Trích nội dung: ${shortText}${extractedText.length > 300 ? "..." : ""}`
+            : null,
+        ]
+          .filter(Boolean)
+          .join(". ");
 
-    await payload.request(`/api/media/${encodeURIComponent(media.id)}`, {
-      method: "PATCH",
-      body: {
-        uploadedFrom: "api",
-        kind: visionKind ?? "contract",
-        description: mediaDescription,
-        extractedText: extractedText.slice(0, 50_000),
-      },
-    });
-    logger.info(
-      "Import",
-      `  ✓ patched media#${media.id} (kind=${visionKind ?? "contract"}, ${extractionMethod})`,
-    );
+      await payload.request(`/api/media/${encodeURIComponent(mediaId)}`, {
+        method: "PATCH",
+        body: {
+          uploadedFrom: "api",
+          kind: visionKind ?? "contract",
+          description: mediaDescription,
+          extractedText: extractedText.slice(0, 50_000),
+        },
+      });
+      logger.info(
+        "Import",
+        `  ✓ patched media#${mediaId} (kind=${visionKind ?? "contract"}, ${extractionMethod})`,
+      );
+    }
 
     // 6. Tạo Order draft + link media qua orderDocuments
     //    Bot không xoá Order có status='paused' của bulk import → safe để rerun.
@@ -293,6 +301,14 @@ async function processFile(
       );
     } else {
       try {
+        // deadline là field required. Đặt = signedDate + 1 năm (placeholder
+        // hợp lệ cho draft); admin sẽ edit lại khi activate đơn.
+        const fallbackDeadline = meta.signedDate
+          ? new Date(new Date(meta.signedDate).getTime() + 365 * 86400_000)
+              .toISOString()
+              .slice(0, 10)
+          : new Date(Date.now() + 365 * 86400_000).toISOString().slice(0, 10);
+
         const orderBody: Record<string, unknown> = {
           market: "jp",
           employer: meta.employer,
@@ -301,6 +317,7 @@ async function processFile(
           quantityNeeded: 1,
           contractNumber,
           contractDate: meta.signedDate,
+          deadline: fallbackDeadline,
           status: "paused", // draft state — admin sẽ activate sau khi điền đủ
           notes:
             `Bulk imported từ file scan HĐCU.\n` +
@@ -310,7 +327,7 @@ async function processFile(
           orderDocuments: [
             {
               kind: "HĐCU scan",
-              file: media.id,
+              file: mediaId,
               notes: `Scan bản gốc HĐCU - ${meta.employer}`,
             },
           ],
