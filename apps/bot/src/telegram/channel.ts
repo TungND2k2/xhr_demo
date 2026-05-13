@@ -49,10 +49,15 @@ interface TgMessageEntity {
   length: number;
   user?: TgUser;
 }
+interface TgForumTopicCreated {
+  name: string;
+  icon_color?: number;
+  icon_custom_emoji_id?: string;
+}
 interface TgMessage {
   message_id: number;
   from?: TgUser;
-  chat: { id: number; type: string; title?: string };
+  chat: { id: number; type: string; title?: string; is_forum?: boolean };
   text?: string;
   caption?: string;
   entities?: TgMessageEntity[];
@@ -60,6 +65,12 @@ interface TgMessage {
   document?: TgDocument;
   photo?: TgPhotoSize[];
   reply_to_message?: TgMessage;
+  /** Forum topic — message_thread_id chỉ có khi group là supergroup + Forum bật.
+   *  Tin trong topic mặc định (General) có thread_id = 1. */
+  message_thread_id?: number;
+  is_topic_message?: boolean;
+  /** Khi event "topic được tạo" — bot có thể lấy tên topic từ đây. */
+  forum_topic_created?: TgForumTopicCreated;
   date: number;
 }
 interface TgUpdate { update_id: number; message?: TgMessage }
@@ -172,19 +183,28 @@ export class TelegramChannel {
     this.queue.stop();
   }
 
-  /** Send a message to a chat — also exposed for cron worker notifications. */
-  async sendMessage(chatId: number, text: string): Promise<void> {
+  /** Send a message to a chat — also exposed for cron worker notifications.
+   *  Hỗ trợ `messageThreadId` để bot reply trong đúng topic của Forum group. */
+  async sendMessage(
+    chatId: number,
+    text: string,
+    messageThreadId?: number,
+  ): Promise<void> {
     const html = mdToTelegramHtml(text);
     for (const chunk of splitMessage(html)) {
       try {
+        const body: Record<string, unknown> = {
+          chat_id: chatId,
+          text: chunk,
+          parse_mode: "HTML",
+        };
+        if (messageThreadId !== undefined) {
+          body.message_thread_id = messageThreadId;
+        }
         await fetch(`${this.apiBase}/sendMessage`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            chat_id: chatId,
-            text: chunk,
-            parse_mode: "HTML",
-          }),
+          body: JSON.stringify(body),
           signal: AbortSignal.timeout(15_000),
         });
       } catch (e) {
@@ -325,10 +345,14 @@ export class TelegramChannel {
     const chatId = msg.chat.id;
     const text = (overrideText ?? msg.text ?? msg.caption ?? "").trim();
 
-    // Auto-track Telegram identity (user + group + membership). Fire-and-
-    // forget — không block xử lý message. syncOnIncomingMessage tự find-
-    // before-create để không tạo duplicate.
-    void syncOnIncomingMessage(msg.from, msg.chat).then((res) => {
+    // Auto-track Telegram identity (user + group + membership + topic).
+    // Fire-and-forget cho tracking (Tg users/groups). processMessage sau
+    // sẽ tự lookup TelegramTopic + agent (await, ~50-100ms) trước khi
+    // gọi pipeline để có agent context cho multi-agent routing.
+    void syncOnIncomingMessage(msg.from, msg.chat, {
+      message_thread_id: msg.message_thread_id,
+      forum_topic_created: msg.forum_topic_created,
+    }).then((res) => {
       if (res.blocked) {
         logger.info(
           "Telegram",
@@ -345,8 +369,11 @@ export class TelegramChannel {
     };
 
     if (!this.queue.enqueue(job)) {
-      this.sendMessage(chatId, "Hệ thống đang bận, vui lòng thử lại sau giây lát.")
-        .catch(() => {});
+      this.sendMessage(
+        chatId,
+        "Hệ thống đang bận, vui lòng thử lại sau giây lát.",
+        msg.message_thread_id,
+      ).catch(() => {});
     }
   }
 
@@ -668,12 +695,15 @@ export class TelegramChannel {
     text: string,
     msg: TgMessage,
   ): Promise<void> {
-    // Quick commands — không qua pipeline.
+    // Quick commands — không qua pipeline. Pass thread_id để reply trong
+    // cùng topic Forum.
+    const tid = msg.message_thread_id;
     if (text === "/reset" || text === "/clear") {
       this.clearChatHistory(chatId);
       await this.sendMessage(
         chatId,
         "🧹 Đã xoá lịch sử trò chuyện. Bắt đầu lại từ đầu nhé.",
+        tid,
       );
       return;
     }
@@ -685,10 +715,11 @@ export class TelegramChannel {
         `• username: ${u?.username ? "@" + u.username : "(không có)"}`,
         `• tên: ${[u?.first_name, u?.last_name].filter(Boolean).join(" ")}`,
         `• chatId hiện tại: \`${chatId}\` (${msg.chat.type})`,
+        tid !== undefined ? `• topic_id: \`${tid}\`` : "",
         "",
         "Admin set field `Telegram User ID` trong portal = userId trên để bot DM được bạn.",
-      ];
-      await this.sendMessage(chatId, lines.join("\n"));
+      ].filter(Boolean);
+      await this.sendMessage(chatId, lines.join("\n"), tid);
       return;
     }
 
@@ -704,17 +735,23 @@ export class TelegramChannel {
       : "from=?";
     logger.info("Telegram", `[${chatId}] ${senderTag} ${summary}`);
 
+    // Topic info — nếu message ở trong Forum topic, mọi reply phải kèm
+    // message_thread_id để giữ trong cùng topic. undefined = chat thường / DM.
+    const threadId = msg.message_thread_id;
+
     // Initial status message — edit it as tools are called.
-    const statusMsgId = await this.sendPlainMessage(chatId, "💭 Đang nghĩ...");
+    const statusMsgId = await this.sendPlainMessage(chatId, "💭 Đang nghĩ...", threadId);
     const activityLog: string[] = [];
     let lastEditAt = 0;
     let pendingEdit: NodeJS.Timeout | null = null;
 
     const refreshTyping = () => {
+      const body: Record<string, unknown> = { chat_id: chatId, action: "typing" };
+      if (threadId !== undefined) body.message_thread_id = threadId;
       void fetch(`${this.apiBase}/sendChatAction`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ chat_id: chatId, action: "typing" }),
+        body: JSON.stringify(body),
         signal: AbortSignal.timeout(5_000),
       }).catch(() => {});
     };
@@ -825,7 +862,7 @@ export class TelegramChannel {
 
     if (pendingEdit) clearTimeout(pendingEdit);
     if (statusMsgId !== null) await this.deleteMessage(chatId, statusMsgId);
-    await this.sendMessage(chatId, result.reply);
+    await this.sendMessage(chatId, result.reply, threadId);
   }
 
   /** Cho user clear context khi cần (vd: /reset). Không expose qua Telegram
@@ -857,12 +894,18 @@ export class TelegramChannel {
     }
   }
 
-  private async sendPlainMessage(chatId: number, text: string): Promise<number | null> {
+  private async sendPlainMessage(
+    chatId: number,
+    text: string,
+    messageThreadId?: number,
+  ): Promise<number | null> {
     try {
+      const body: Record<string, unknown> = { chat_id: chatId, text };
+      if (messageThreadId !== undefined) body.message_thread_id = messageThreadId;
       const res = await fetch(`${this.apiBase}/sendMessage`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ chat_id: chatId, text }),
+        body: JSON.stringify(body),
         signal: AbortSignal.timeout(15_000),
       });
       if (!res.ok) return null;

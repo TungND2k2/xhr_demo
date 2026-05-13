@@ -55,6 +55,17 @@ interface TelegramMembershipRow {
   messageCount?: number;
 }
 
+interface TelegramTopicRow {
+  id: string;
+  telegramGroup: string | { id: string };
+  topicId: string;
+  title?: string;
+  agent?: string | { id: string; name?: string; docs?: string };
+  messageCount?: number;
+  firstSeenAt?: string;
+  lastSeenAt?: string;
+}
+
 interface FindResp<T> {
   docs: T[];
   totalDocs: number;
@@ -301,21 +312,188 @@ export async function syncTelegramMembership(
 }
 
 /**
+ * Upsert TelegramTopic. Cần ID nội bộ của TelegramGroup + topicId từ
+ * `message_thread_id`. Title lấy từ `forum_topic_created.name` (event
+ * create) hoặc giữ giá trị cũ nếu chỉ là tin thường trong topic.
+ *
+ * Trả `{ id, agentId, agentDocs }` để caller dùng ngay cho pipeline —
+ * tránh round-trip thêm.
+ */
+export async function syncTelegramTopic(
+  telegramGroupDocId: string,
+  topicId: number,
+  titleHint?: string,
+): Promise<{
+  id: string;
+  agentId: string | null;
+  agentName: string | null;
+  agentDocs: string | null;
+} | null> {
+  const topicIdStr = String(topicId);
+  try {
+    const find = await payload.request<FindResp<TelegramTopicRow>>(
+      `/api/telegram-topics`,
+      {
+        query: {
+          where: {
+            and: [
+              { telegramGroup: { equals: telegramGroupDocId } },
+              { topicId: { equals: topicIdStr } },
+            ],
+          },
+          limit: 1,
+          depth: 1, // resolve agent relationship để lấy docs
+        },
+      },
+    );
+    const nowIso = new Date().toISOString();
+
+    if (find.docs.length > 0) {
+      const existing = find.docs[0];
+      const updateBody: Record<string, unknown> = {
+        lastSeenAt: nowIso,
+        messageCount: (existing.messageCount ?? 0) + 1,
+      };
+      // Cập nhật title nếu Telegram gửi event create topic — chỉ overwrite
+      // khi title hiện tại là placeholder mặc định.
+      if (titleHint && (!existing.title || existing.title === topicIdStr)) {
+        updateBody.title = titleHint;
+      }
+      void payload
+        .request(`/api/telegram-topics/${existing.id}`, {
+          method: "PATCH",
+          body: updateBody,
+        })
+        .catch((err) => logger.debug("TgSync", `PATCH topic ${existing.id} failed: ${err}`));
+
+      const agentField = existing.agent;
+      const agent =
+        typeof agentField === "object" && agentField !== null ? agentField : null;
+      return {
+        id: existing.id,
+        agentId: agent
+          ? agent.id
+          : typeof agentField === "string"
+            ? agentField
+            : null,
+        agentName: agent?.name ?? null,
+        agentDocs: agent?.docs ?? null,
+      };
+    }
+
+    // Topic mới — tạo record, agent để trống cho admin map sau
+    try {
+      const created = await payload.request<{ doc: TelegramTopicRow }>(
+        `/api/telegram-topics`,
+        {
+          method: "POST",
+          body: {
+            telegramGroup: telegramGroupDocId,
+            topicId: topicIdStr,
+            title: titleHint ?? `Topic ${topicIdStr}`,
+            active: true,
+            firstSeenAt: nowIso,
+            lastSeenAt: nowIso,
+            messageCount: 1,
+          },
+        },
+      );
+      logger.info(
+        "TgSync",
+        `+ topic group#${telegramGroupDocId}/${topicIdStr} "${titleHint ?? "?"}"`,
+      );
+      return {
+        id: created.doc.id,
+        agentId: null,
+        agentName: null,
+        agentDocs: null,
+      };
+    } catch (err) {
+      logger.debug("TgSync", `POST topic failed (likely race): ${err}`);
+      const retry = await payload.request<FindResp<TelegramTopicRow>>(
+        `/api/telegram-topics`,
+        {
+          query: {
+            where: {
+              and: [
+                { telegramGroup: { equals: telegramGroupDocId } },
+                { topicId: { equals: topicIdStr } },
+              ],
+            },
+            limit: 1,
+            depth: 1,
+          },
+        },
+      );
+      if (retry.docs.length > 0) {
+        const existing = retry.docs[0];
+        const agentField = existing.agent;
+        const agent =
+          typeof agentField === "object" && agentField !== null ? agentField : null;
+        return {
+          id: existing.id,
+          agentId: agent
+            ? agent.id
+            : typeof agentField === "string"
+              ? agentField
+              : null,
+          agentName: agent?.name ?? null,
+          agentDocs: agent?.docs ?? null,
+        };
+      }
+      return null;
+    }
+  } catch (err) {
+    logger.warn(
+      "TgSync",
+      `syncTelegramTopic group#${telegramGroupDocId}/${topicIdStr} failed: ${err instanceof PayloadError ? err.message : err}`,
+    );
+    return null;
+  }
+}
+
+/**
  * Convenience — gọi 1 lần cho 1 message: sync user (luôn) + group +
- * membership (nếu là group chat). Trả về `blocked` flag nếu user bị
- * admin chặn → caller có thể skip pipeline.
+ * membership + topic (nếu có message_thread_id). Trả về `blocked` flag +
+ * `topic` info (agent assigned) để caller dùng cho pipeline routing.
  */
 export async function syncOnIncomingMessage(
   user: TgUserPayload,
   chat: TgChatPayload,
-): Promise<{ blocked: boolean }> {
+  message?: {
+    message_thread_id?: number;
+    forum_topic_created?: { name: string };
+  },
+): Promise<{
+  blocked: boolean;
+  topic: {
+    id: string;
+    agentId: string | null;
+    agentName: string | null;
+    agentDocs: string | null;
+  } | null;
+}> {
   const userResult = await syncTelegramUser(user);
   if (chat.type === "private") {
-    return { blocked: userResult?.blocked ?? false };
+    return { blocked: userResult?.blocked ?? false, topic: null };
   }
   const groupResult = await syncTelegramGroup(chat);
   if (userResult && groupResult) {
     void syncTelegramMembership(userResult.id, groupResult.id);
   }
-  return { blocked: userResult?.blocked ?? false };
+
+  // Topic sync — chỉ khi có thread_id (Forum mode)
+  let topicResult: Awaited<ReturnType<typeof syncTelegramTopic>> = null;
+  if (groupResult && message?.message_thread_id) {
+    topicResult = await syncTelegramTopic(
+      groupResult.id,
+      message.message_thread_id,
+      message.forum_topic_created?.name,
+    );
+  }
+
+  return {
+    blocked: userResult?.blocked ?? false,
+    topic: topicResult,
+  };
 }
