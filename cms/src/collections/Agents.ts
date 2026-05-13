@@ -123,19 +123,32 @@ const ASSET_TOOLS: ToolDef[] = [
 ];
 const EMAIL_TOOLS: ToolDef[] = [cb("send_email", "✉️ Gửi email")];
 
-// Build group field từ tool list — mỗi tool thành 1 checkbox field
+// Build group field từ tool list — mỗi tool thành 1 checkbox field.
+// Field đầu tiên `_selectAll` là UI custom (master checkbox) — tick → tick hết
+// các checkbox bên dưới. Pipeline bỏ qua field này khi flatten.
 function toolGroup(name: string, label: string, tools: ToolDef[], description?: string) {
   return {
     name,
     label,
     type: "group" as const,
     admin: description ? { description } : undefined,
-    fields: tools.map((t) => ({
-      name: t.name,
-      label: t.label,
-      type: "checkbox" as const,
-      defaultValue: false,
-    })),
+    fields: [
+      {
+        name: "_selectAll",
+        type: "ui" as const,
+        admin: {
+          components: {
+            Field: "/components/admin/ToolGroupSelectAll",
+          },
+        },
+      },
+      ...tools.map((t) => ({
+        name: t.name,
+        label: t.label,
+        type: "checkbox" as const,
+        defaultValue: false,
+      })),
+    ],
   };
 }
 
