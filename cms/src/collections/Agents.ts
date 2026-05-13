@@ -90,6 +90,21 @@ const TELEGRAM_IDENTITY_TOOLS = [
   opt("list_group_members"),
 ];
 const EXPORT_TOOLS = [opt("create_export_file"), opt("create_xlsx_file")];
+const CALENDAR_TOOLS = [
+  opt("list_calendars"),
+  opt("get_calendars"),
+  opt("create_calendars"),
+  opt("update_calendars"),
+  opt("delete_calendars"),
+];
+const ASSET_TOOLS = [
+  opt("list_assets"),
+  opt("get_assets"),
+  opt("create_assets"),
+  opt("update_assets"),
+  opt("delete_assets"),
+];
+const EMAIL_TOOLS = [opt("send_email")];
 
 export const Agents: CollectionConfig = {
   slug: "agents",
@@ -251,6 +266,33 @@ export const Agents: CollectionConfig = {
           hasMany: true,
           options: EXPORT_TOOLS,
           admin: { description: "Excel / CSV / Markdown / JSON" },
+        },
+        {
+          name: "calendars",
+          label: "📅 Lịch (Calendars)",
+          type: "select",
+          hasMany: true,
+          options: CALENDAR_TOOLS,
+          admin: { description: "Lịch họp, hẹn, sự kiện" },
+        },
+        {
+          name: "assets",
+          label: "🏢 Tài sản (Assets)",
+          type: "select",
+          hasMany: true,
+          options: ASSET_TOOLS,
+          admin: { description: "Laptop, xe, máy may, văn phòng phẩm..." },
+        },
+        {
+          name: "email",
+          label: "✉️ Email",
+          type: "select",
+          hasMany: true,
+          options: EMAIL_TOOLS,
+          admin: {
+            description:
+              "Gửi email cho lãnh đạo (chị Hương, chị Hoa). Cần SMTP config trên server.",
+          },
         },
       ],
     },

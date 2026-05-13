@@ -14,6 +14,9 @@ import { reminderTools } from "./reminders.tools.js";
 import { userTools } from "./users.tools.js";
 import { telegramIdentityTools } from "./telegram-identity.tools.js";
 import { exportTools } from "./export.tools.js";
+import { calendarTools } from "./calendars.tools.js";
+import { assetTools } from "./assets.tools.js";
+import { emailTools } from "./email.tools.js";
 
 import { advanceOrderStatus } from "./orders.workflow.js";
 import { orderProgressSummary } from "./orders.summary.js";
@@ -44,6 +47,15 @@ export const allTools = [
 
   // Export — AI sinh file CSV/MD/JSON/TXT, upload S3 + gửi Telegram.
   ...exportTools,           // 1: create_export_file
+
+  // Calendar — quản lý lịch họp/hẹn/sự kiện.
+  ...calendarTools,         // 5: list/get/create/update/delete calendars
+
+  // Asset — quản lý tài sản công ty (laptop, xe, máy may...).
+  ...assetTools,            // 5: list/get/create/update/delete assets
+
+  // Email — gửi email cho lãnh đạo (chị Hương + chị Hoa) qua SMTP.
+  ...emailTools,            // 1: send_email
 
   // Domain-specific.
   advanceOrderStatus,

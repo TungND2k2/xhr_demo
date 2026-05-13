@@ -426,20 +426,66 @@ export const Workers: CollectionConfig = {
           fields: [
             {
               name: "status",
-              label: "Trạng thái",
+              label: "Trạng thái vòng đời",
               type: "select",
               required: true,
               defaultValue: "new",
               options: [
                 { label: "🆕 Mới đăng ký", value: "new" },
-                { label: "🔍 Đang sàng lọc", value: "screening" },
+                { label: "🔍 Đang tìm hiểu (nguồn)", value: "researching" },
+                { label: "✋ Đồng ý tham gia", value: "agreed" },
+                { label: "🏥 Đang khám SK", value: "health_check" },
+                { label: "💰 Đã đặt cọc", value: "deposit_paid" },
                 { label: "🎓 Đang đào tạo", value: "training" },
-                { label: "✅ Sẵn sàng", value: "ready" },
+                { label: "🎯 Đang thi tuyển", value: "exam" },
+                { label: "✅ Đỗ — sẵn sàng", value: "passed" },
+                { label: "❌ Trượt", value: "failed" },
                 { label: "📝 Đã ký HĐ", value: "contracted" },
+                { label: "🛂 Đang xin visa", value: "visa_prep" },
                 { label: "✈️ Đã xuất cảnh", value: "deployed" },
+                { label: "💼 Đang làm việc tại NN", value: "working" },
                 { label: "🏠 Đã về nước", value: "returned" },
                 { label: "⛔ Khoá tạm", value: "paused" },
                 { label: "🚫 Blacklist", value: "blacklisted" },
+              ],
+            },
+            {
+              type: "row",
+              fields: [
+                {
+                  name: "examResult",
+                  label: "Kết quả thi tuyển",
+                  type: "select",
+                  options: [
+                    { label: "⏳ Chưa thi", value: "pending" },
+                    { label: "✅ Đỗ", value: "pass" },
+                    { label: "❌ Trượt", value: "fail" },
+                  ],
+                  admin: {
+                    width: "30%",
+                    description: 'Set sau khi LĐ thi tuyển bước W4 (Phỏng vấn đối tác).',
+                  },
+                },
+                {
+                  name: "examScore",
+                  label: "Điểm",
+                  type: "number",
+                  admin: {
+                    width: "20%",
+                    description: "Nếu có điểm số cụ thể",
+                  },
+                },
+                {
+                  name: "failureReason",
+                  label: "Lý do trượt",
+                  type: "textarea",
+                  admin: {
+                    width: "50%",
+                    description:
+                      'Chỉ điền khi examResult=fail. Để admin biết lý do tránh lặp lại với LĐ khác.',
+                    condition: (data) => data?.examResult === "fail",
+                  },
+                },
               ],
             },
             {

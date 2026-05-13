@@ -24,6 +24,8 @@ import { TelegramGroups } from "./collections/TelegramGroups";
 import { TelegramMembership } from "./collections/TelegramMembership";
 import { TelegramTopics } from "./collections/TelegramTopics";
 import { Agents } from "./collections/Agents";
+import { Calendars } from "./collections/Calendars";
+import { Assets } from "./collections/Assets";
 
 const filename = fileURLToPath(import.meta.url);
 const dirname = path.dirname(filename);
@@ -67,6 +69,8 @@ export default buildConfig({
     TelegramMembership,
     TelegramTopics,
     Agents,
+    Calendars,
+    Assets,
   ],
   plugins: [
     // S3-compatible storage cho collection media. Endpoint do .env định nghĩa

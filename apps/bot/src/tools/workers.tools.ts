@@ -32,17 +32,38 @@ export const workerTools = createCrudTools({
     nationalId: z.string().optional().describe("CCCD/CMND"),
     passportNo: z.string().optional(),
     healthStatus: z.enum(["pending", "scheduled", "pass", "fail", "retest"]).optional(),
-    status: z.enum([
-      "new",
-      "screening",
-      "training",
-      "ready",
-      "contracted",
-      "deployed",
-      "returned",
-      "paused",
-      "blacklisted",
-    ]).optional(),
+    status: z
+      .enum([
+        "new",
+        "researching",
+        "agreed",
+        "health_check",
+        "deposit_paid",
+        "training",
+        "exam",
+        "passed",
+        "failed",
+        "contracted",
+        "visa_prep",
+        "deployed",
+        "working",
+        "returned",
+        "paused",
+        "blacklisted",
+      ])
+      .optional()
+      .describe(
+        "Vòng đời LĐ XKLĐ: new → researching (đang tìm hiểu) → agreed (đồng ý tham gia) → health_check (đang khám) → deposit_paid (đặt cọc) → training (đào tạo) → exam (thi tuyển) → passed/failed → contracted (ký HĐ) → visa_prep (xin visa) → deployed (xuất cảnh) → working (làm việc NN) → returned (về nước). paused/blacklisted là trạng thái đặc biệt.",
+      ),
+    examResult: z
+      .enum(["pending", "pass", "fail"])
+      .optional()
+      .describe("Kết quả thi tuyển — set sau khi LĐ thi xong"),
+    examScore: z.number().optional().describe("Điểm thi nếu có"),
+    failureReason: z
+      .string()
+      .optional()
+      .describe('Lý do trượt — chỉ điền khi examResult="fail"'),
     notes: z.string().optional(),
   },
 });

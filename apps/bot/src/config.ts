@@ -36,6 +36,16 @@ const ConfigSchema = z.object({
   // Cron
   CRON_TICK_MS: z.coerce.number().default(10_000),
 
+  // SMTP để gửi email báo cáo cho lãnh đạo. Để trống = email tool tắt.
+  SMTP_HOST: z.string().optional(),
+  SMTP_PORT: z.coerce.number().default(587),
+  SMTP_USER: z.string().optional(),
+  SMTP_PASS: z.string().optional(),
+  SMTP_FROM: z.string().optional().describe('From address, vd "xHR Bot <bot@tlg.vn>"'),
+  /** Whitelist email được phép gửi tới — bảo mật, tránh AI gửi nhầm.
+   *  Comma-separated. Để trống = cho phép tất cả (không khuyến nghị). */
+  EMAIL_ALLOWED_RECIPIENTS: z.string().optional(),
+
   NODE_ENV: z.enum(["development", "production"]).default("development"),
 });
 

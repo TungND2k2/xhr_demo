@@ -76,6 +76,9 @@ interface AgentRow {
         users?: string[];
         telegramIdentity?: string[];
         exports?: string[];
+        calendars?: string[];
+        assets?: string[];
+        email?: string[];
       };
   active?: boolean;
 }
