@@ -55,15 +55,37 @@ interface TelegramMembershipRow {
   messageCount?: number;
 }
 
+interface AgentRow {
+  id: string;
+  name?: string;
+  displayName?: string;
+  docs?: string;
+  enabledTools?: string[];
+  active?: boolean;
+}
+
 interface TelegramTopicRow {
   id: string;
   telegramGroup: string | { id: string };
   topicId: string;
   title?: string;
-  agent?: string | { id: string; name?: string; docs?: string };
+  agent?: string | AgentRow;
   messageCount?: number;
   firstSeenAt?: string;
   lastSeenAt?: string;
+}
+
+export interface ResolvedAgent {
+  id: string;
+  name: string;
+  displayName?: string;
+  docs?: string;
+  enabledTools?: string[];
+}
+
+export interface ResolvedTopic {
+  id: string;
+  agent: ResolvedAgent | null;
 }
 
 interface FindResp<T> {
@@ -323,12 +345,7 @@ export async function syncTelegramTopic(
   telegramGroupDocId: string,
   topicId: number,
   titleHint?: string,
-): Promise<{
-  id: string;
-  agentId: string | null;
-  agentName: string | null;
-  agentDocs: string | null;
-} | null> {
+): Promise<ResolvedTopic | null> {
   const topicIdStr = String(topicId);
   try {
     const find = await payload.request<FindResp<TelegramTopicRow>>(
@@ -367,18 +384,20 @@ export async function syncTelegramTopic(
         .catch((err) => logger.debug("TgSync", `PATCH topic ${existing.id} failed: ${err}`));
 
       const agentField = existing.agent;
-      const agent =
+      const agentObj =
         typeof agentField === "object" && agentField !== null ? agentField : null;
-      return {
-        id: existing.id,
-        agentId: agent
-          ? agent.id
-          : typeof agentField === "string"
-            ? agentField
-            : null,
-        agentName: agent?.name ?? null,
-        agentDocs: agent?.docs ?? null,
-      };
+      // Chỉ trả agent khi nó được populate đầy đủ (depth:1) và đang active
+      const resolvedAgent: ResolvedAgent | null =
+        agentObj && agentObj.id && agentObj.active !== false
+          ? {
+              id: agentObj.id,
+              name: agentObj.name ?? agentObj.id,
+              displayName: agentObj.displayName,
+              docs: agentObj.docs,
+              enabledTools: agentObj.enabledTools,
+            }
+          : null;
+      return { id: existing.id, agent: resolvedAgent };
     }
 
     // Topic mới — tạo record, agent để trống cho admin map sau
@@ -402,12 +421,7 @@ export async function syncTelegramTopic(
         "TgSync",
         `+ topic group#${telegramGroupDocId}/${topicIdStr} "${titleHint ?? "?"}"`,
       );
-      return {
-        id: created.doc.id,
-        agentId: null,
-        agentName: null,
-        agentDocs: null,
-      };
+      return { id: created.doc.id, agent: null };
     } catch (err) {
       logger.debug("TgSync", `POST topic failed (likely race): ${err}`);
       const retry = await payload.request<FindResp<TelegramTopicRow>>(
@@ -428,18 +442,19 @@ export async function syncTelegramTopic(
       if (retry.docs.length > 0) {
         const existing = retry.docs[0];
         const agentField = existing.agent;
-        const agent =
+        const agentObj =
           typeof agentField === "object" && agentField !== null ? agentField : null;
-        return {
-          id: existing.id,
-          agentId: agent
-            ? agent.id
-            : typeof agentField === "string"
-              ? agentField
-              : null,
-          agentName: agent?.name ?? null,
-          agentDocs: agent?.docs ?? null,
-        };
+        const resolvedAgent: ResolvedAgent | null =
+          agentObj && agentObj.id && agentObj.active !== false
+            ? {
+                id: agentObj.id,
+                name: agentObj.name ?? agentObj.id,
+                displayName: agentObj.displayName,
+                docs: agentObj.docs,
+                enabledTools: agentObj.enabledTools,
+              }
+            : null;
+        return { id: existing.id, agent: resolvedAgent };
       }
       return null;
     }
@@ -448,6 +463,66 @@ export async function syncTelegramTopic(
       "TgSync",
       `syncTelegramTopic group#${telegramGroupDocId}/${topicIdStr} failed: ${err instanceof PayloadError ? err.message : err}`,
     );
+    return null;
+  }
+}
+
+/**
+ * Read-only lookup — không upsert, chỉ tra cứu agent đã gán cho (chatId,
+ * topicId). Dùng trong processMessage để biết route message tới agent
+ * nào. Nếu topic chưa được sync hoặc chưa được map agent → trả null
+ * (caller fallback default agent).
+ */
+export async function lookupAgentForMessage(
+  chatId: number,
+  topicId?: number,
+): Promise<ResolvedAgent | null> {
+  if (!topicId) return null;
+  try {
+    // 1. Find group by chatId
+    const groupRes = await payload.request<FindResp<TelegramGroupRow>>(
+      `/api/telegram-groups`,
+      {
+        query: {
+          where: { telegramChatId: { equals: String(chatId) } },
+          limit: 1,
+          depth: 0,
+        },
+      },
+    );
+    if (groupRes.docs.length === 0) return null;
+    const groupDocId = groupRes.docs[0].id;
+
+    // 2. Find topic by (group, topicId), populate agent
+    const topicRes = await payload.request<FindResp<TelegramTopicRow>>(
+      `/api/telegram-topics`,
+      {
+        query: {
+          where: {
+            and: [
+              { telegramGroup: { equals: groupDocId } },
+              { topicId: { equals: String(topicId) } },
+            ],
+          },
+          limit: 1,
+          depth: 1,
+        },
+      },
+    );
+    if (topicRes.docs.length === 0) return null;
+
+    const agentField = topicRes.docs[0].agent;
+    if (typeof agentField !== "object" || agentField === null) return null;
+    if (agentField.active === false) return null;
+    return {
+      id: agentField.id,
+      name: agentField.name ?? agentField.id,
+      displayName: agentField.displayName,
+      docs: agentField.docs,
+      enabledTools: agentField.enabledTools,
+    };
+  } catch (err) {
+    logger.debug("TgSync", `lookupAgentForMessage failed: ${err}`);
     return null;
   }
 }
@@ -466,12 +541,7 @@ export async function syncOnIncomingMessage(
   },
 ): Promise<{
   blocked: boolean;
-  topic: {
-    id: string;
-    agentId: string | null;
-    agentName: string | null;
-    agentDocs: string | null;
-  } | null;
+  topic: ResolvedTopic | null;
 }> {
   const userResult = await syncTelegramUser(user);
   if (chat.type === "private") {

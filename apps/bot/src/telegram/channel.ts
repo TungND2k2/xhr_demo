@@ -20,7 +20,7 @@ import { convertToMarkdown, MarkItDownError } from "../extraction/markitdown.js"
 import { describeDocument, describeImage, describeScannedPdf } from "../extraction/describe.js";
 import { pdfToImages, PdfToImagesError, type PdfPageImage } from "../extraction/pdf-to-images.js";
 import { payload, PayloadError } from "../payload/client.js";
-import { syncOnIncomingMessage } from "../payload/telegram-sync.js";
+import { syncOnIncomingMessage, lookupAgentForMessage } from "../payload/telegram-sync.js";
 
 interface TgUser {
   id: number;
@@ -789,6 +789,13 @@ export class TelegramChannel {
     };
     const attachments = await this.resolveAttachments(msg, onStatus);
 
+    // Multi-agent: lookup agent gán cho topic này. Nếu trả null → pipeline
+    // dùng SYSTEM_PROMPT mặc định + full tool set (behavior cũ).
+    const agent = await lookupAgentForMessage(chatId, threadId);
+    if (agent) {
+      onStatus(`🤖 ${agent.displayName ?? agent.name}`);
+    }
+
     // Build attachmentNote cho lịch sử (để turn sau AI biết user trước đã gửi gì)
     const attachmentNote = attachments
       .map((a) => `${a.type === "image" ? "🖼" : "📄"} ${a.name}`)
@@ -822,6 +829,7 @@ export class TelegramChannel {
       message: text,
       attachments,
       priorMessages: history,
+      agent,
       currentChatter: msg.from
         ? {
             telegramUserId: msg.from.id,
@@ -831,6 +839,7 @@ export class TelegramChannel {
             chatId: msg.chat.id,
             chatType: msg.chat.type,
             chatTitle: msg.chat.title,
+            messageThreadId: threadId,
           }
         : undefined,
       onToolCall: (name, args) => {

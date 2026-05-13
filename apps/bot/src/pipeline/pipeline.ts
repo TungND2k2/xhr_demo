@@ -59,7 +59,20 @@ export interface PipelineInput {
     chatId: number;
     chatType: string;
     chatTitle?: string;
+    /** message_thread_id nếu trong Forum topic. */
+    messageThreadId?: number;
   };
+  /** Agent gán cho topic hiện tại (nếu có). Khi set, pipeline:
+   *   - Filter tools chỉ còn `enabledTools`
+   *   - Append `docs` vào sau base system prompt
+   *  Khi null/undefined → dùng full tools + SYSTEM_PROMPT (behavior cũ). */
+  agent?: {
+    id: string;
+    name: string;
+    displayName?: string;
+    docs?: string;
+    enabledTools?: string[];
+  } | null;
   /** Optional callback fired each time Claude calls a tool. Receives raw args
    *  để caller có thể format mô tả thân thiện hiển thị cho user. */
   onToolCall?: (toolName: string, args: Record<string, unknown>) => void;
@@ -173,9 +186,31 @@ export async function runPipeline(input: PipelineInput): Promise<PipelineOutput>
       : "";
   logger.info(tag, `▶ user: "${preview(input.message, 100)}"${attSummary}`);
 
+  // Filter tools theo agent.enabledTools — multi-agent: mỗi agent chỉ
+  // thấy subset tool liên quan. Khi không có agent → expose tất cả.
+  const enabledToolNames = input.agent?.enabledTools ?? null;
+  const filteredTools =
+    enabledToolNames && enabledToolNames.length > 0
+      ? allTools.filter((t) => {
+          // Tool name trong MCP có thể là "list_workers", AI thấy
+          // "mcp__skillbot__list_workers". So sánh phần sau prefix.
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const rawName = (t as any).name as string | undefined;
+          if (!rawName) return false;
+          return enabledToolNames.includes(rawName);
+        })
+      : allTools;
+
+  if (input.agent) {
+    logger.info(
+      tag,
+      `Agent: ${input.agent.name} (${filteredTools.length}/${allTools.length} tools)`,
+    );
+  }
+
   const mcpServer = createSdkMcpServer({
     name: "skillbot",
-    tools: allTools,
+    tools: filteredTools,
   });
 
   // Wrap iterator with global timeout — Claude SDK sometimes hangs.
@@ -278,12 +313,20 @@ export async function runPipeline(input: PipelineInput): Promise<PipelineOutput>
     );
   }
 
+  // Khi có agent gán cho topic: dùng AGENT DOCS thay cho SYSTEM_PROMPT chung.
+  // Agent docs do admin viết qua portal (Vai trò + Quy trình + Rules + ...)
+  // → focused hơn full SYSTEM_PROMPT mặc định. Khi không có agent → fallback
+  // SYSTEM_PROMPT để giữ behavior cũ.
+  const businessPrompt = input.agent?.docs?.trim()
+    ? `# Bạn là ${input.agent.displayName ?? input.agent.name}\n\n${input.agent.docs}`
+    : SYSTEM_PROMPT;
+
   const dynamicSystemPrompt = [
     headBlock.join("\n"),
     "",
     "---",
     "",
-    SYSTEM_PROMPT,
+    businessPrompt,
   ].join("\n");
 
   // ⚠️ TEMP DEBUG — full head block (time + chatter) để confirm AI thấy.
