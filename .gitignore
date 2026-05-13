@@ -17,6 +17,9 @@ test-output.log
 db-dump.json
 *.dump
 
+# Private files — không push 300MB scan contract lên git
+private/
+
 # OS
 .DS_Store
 Thumbs.db
