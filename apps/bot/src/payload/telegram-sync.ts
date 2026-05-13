@@ -60,8 +60,39 @@ interface AgentRow {
   name?: string;
   displayName?: string;
   docs?: string;
-  enabledTools?: string[];
+  /** Schema mới: object grouped theo category, mỗi field là string[].
+   *  Legacy schema: string[] phẳng (giữ tương thích đến hết PoC). */
+  enabledTools?:
+    | string[]
+    | {
+        workers?: string[];
+        orders?: string[];
+        orderWorkers?: string[];
+        contracts?: string[];
+        workflowStages?: string[];
+        forms?: string[];
+        media?: string[];
+        reminders?: string[];
+        users?: string[];
+        telegramIdentity?: string[];
+        exports?: string[];
+      };
   active?: boolean;
+}
+
+/** Flatten enabledTools — group object → single string[]. Hoặc nếu đã
+ *  là array (legacy schema) thì return luôn. */
+function flattenEnabledTools(
+  raw: AgentRow["enabledTools"],
+): string[] | undefined {
+  if (!raw) return undefined;
+  if (Array.isArray(raw)) return raw;
+  const out: string[] = [];
+  for (const key of Object.keys(raw) as Array<keyof typeof raw>) {
+    const v = raw[key];
+    if (Array.isArray(v)) out.push(...v);
+  }
+  return out.length > 0 ? out : undefined;
 }
 
 interface TelegramTopicRow {
@@ -394,7 +425,7 @@ export async function syncTelegramTopic(
               name: agentObj.name ?? agentObj.id,
               displayName: agentObj.displayName,
               docs: agentObj.docs,
-              enabledTools: agentObj.enabledTools,
+              enabledTools: flattenEnabledTools(agentObj.enabledTools),
             }
           : null;
       return { id: existing.id, agent: resolvedAgent };
@@ -451,7 +482,7 @@ export async function syncTelegramTopic(
                 name: agentObj.name ?? agentObj.id,
                 displayName: agentObj.displayName,
                 docs: agentObj.docs,
-                enabledTools: agentObj.enabledTools,
+                enabledTools: flattenEnabledTools(agentObj.enabledTools),
               }
             : null;
         return { id: existing.id, agent: resolvedAgent };
@@ -519,7 +550,7 @@ export async function lookupAgentForMessage(
       name: agentField.name ?? agentField.id,
       displayName: agentField.displayName,
       docs: agentField.docs,
-      enabledTools: agentField.enabledTools,
+      enabledTools: flattenEnabledTools(agentField.enabledTools),
     };
   } catch (err) {
     logger.debug("TgSync", `lookupAgentForMessage failed: ${err}`);

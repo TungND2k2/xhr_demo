@@ -22,68 +22,74 @@ import type { CollectionConfig } from "payload";
  * Engine ghép docs này sau base prompt (time + chatter + tool format).
  */
 
-// Tools registry — cập nhật khi thêm tool mới. Admin chọn từ list này.
-const TOOL_OPTIONS = [
-  // Workers CRUD
-  { label: "list_workers", value: "list_workers" },
-  { label: "get_workers", value: "get_workers" },
-  { label: "create_workers", value: "create_workers" },
-  { label: "update_workers", value: "update_workers" },
-  { label: "delete_workers", value: "delete_workers" },
-  // Orders CRUD
-  { label: "list_orders", value: "list_orders" },
-  { label: "get_orders", value: "get_orders" },
-  { label: "create_orders", value: "create_orders" },
-  { label: "update_orders", value: "update_orders" },
-  { label: "delete_orders", value: "delete_orders" },
-  // OrderWorkers
-  { label: "list_order-workers", value: "list_order-workers" },
-  { label: "get_order-workers", value: "get_order-workers" },
-  { label: "create_order-workers", value: "create_order-workers" },
-  { label: "update_order-workers", value: "update_order-workers" },
-  { label: "delete_order-workers", value: "delete_order-workers" },
-  // Contracts
-  { label: "list_contracts", value: "list_contracts" },
-  { label: "get_contracts", value: "get_contracts" },
-  { label: "create_contracts", value: "create_contracts" },
-  { label: "update_contracts", value: "update_contracts" },
-  { label: "delete_contracts", value: "delete_contracts" },
-  // Workflow stages
-  { label: "list_workflow-stages", value: "list_workflow-stages" },
-  { label: "get_workflow-stages", value: "get_workflow-stages" },
-  { label: "create_workflow-stages", value: "create_workflow-stages" },
-  { label: "update_workflow-stages", value: "update_workflow-stages" },
-  // Custom workflow
-  { label: "advance_order_status", value: "advance_order_status" },
-  { label: "order_progress_summary", value: "order_progress_summary" },
-  { label: "worker_summary", value: "worker_summary" },
-  // Forms
-  { label: "list_forms", value: "list_forms" },
-  { label: "get_form", value: "get_form" },
-  { label: "submit_form", value: "submit_form" },
-  { label: "list_form_submissions", value: "list_form_submissions" },
-  { label: "get_form_submission", value: "get_form_submission" },
-  // Media
-  { label: "search_media", value: "search_media" },
-  { label: "get_media_content", value: "get_media_content" },
-  { label: "redescribe_media", value: "redescribe_media" },
-  // Reminders
-  { label: "create_reminder", value: "create_reminder" },
-  { label: "list_reminders", value: "list_reminders" },
-  { label: "update_reminder", value: "update_reminder" },
-  { label: "snooze_reminder", value: "snooze_reminder" },
-  { label: "dismiss_reminder", value: "dismiss_reminder" },
-  // Users
-  { label: "list_users", value: "list_users" },
-  { label: "get_user", value: "get_user" },
-  // Telegram identity
-  { label: "lookup_telegram_user", value: "lookup_telegram_user" },
-  { label: "list_telegram_groups", value: "list_telegram_groups" },
-  { label: "list_group_members", value: "list_group_members" },
-  // Export
-  { label: "create_export_file", value: "create_export_file" },
-  { label: "create_xlsx_file", value: "create_xlsx_file" },
+// Tools registry chia theo nhóm — admin tick từng nhóm dễ hơn so với 1
+// dropdown 45 items. Pipeline flatten lại thành single list khi filter.
+
+const opt = (name: string) => ({ label: name, value: name });
+
+const WORKER_TOOLS = [
+  opt("list_workers"),
+  opt("get_workers"),
+  opt("create_workers"),
+  opt("update_workers"),
+  opt("delete_workers"),
+  opt("worker_summary"),
 ];
+const ORDER_TOOLS = [
+  opt("list_orders"),
+  opt("get_orders"),
+  opt("create_orders"),
+  opt("update_orders"),
+  opt("delete_orders"),
+  opt("advance_order_status"),
+  opt("order_progress_summary"),
+];
+const ORDER_WORKER_TOOLS = [
+  opt("list_order-workers"),
+  opt("get_order-workers"),
+  opt("create_order-workers"),
+  opt("update_order-workers"),
+  opt("delete_order-workers"),
+];
+const CONTRACT_TOOLS = [
+  opt("list_contracts"),
+  opt("get_contracts"),
+  opt("create_contracts"),
+  opt("update_contracts"),
+  opt("delete_contracts"),
+];
+const WORKFLOW_STAGE_TOOLS = [
+  opt("list_workflow-stages"),
+  opt("get_workflow-stages"),
+  opt("create_workflow-stages"),
+  opt("update_workflow-stages"),
+];
+const FORM_TOOLS = [
+  opt("list_forms"),
+  opt("get_form"),
+  opt("submit_form"),
+  opt("list_form_submissions"),
+  opt("get_form_submission"),
+];
+const MEDIA_TOOLS = [
+  opt("search_media"),
+  opt("get_media_content"),
+  opt("redescribe_media"),
+];
+const REMINDER_TOOLS = [
+  opt("create_reminder"),
+  opt("list_reminders"),
+  opt("update_reminder"),
+  opt("snooze_reminder"),
+  opt("dismiss_reminder"),
+];
+const USER_TOOLS = [opt("list_users"), opt("get_user")];
+const TELEGRAM_IDENTITY_TOOLS = [
+  opt("lookup_telegram_user"),
+  opt("list_telegram_groups"),
+  opt("list_group_members"),
+];
+const EXPORT_TOOLS = [opt("create_export_file"), opt("create_xlsx_file")];
 
 export const Agents: CollectionConfig = {
   slug: "agents",
@@ -157,13 +163,96 @@ export const Agents: CollectionConfig = {
     {
       name: "enabledTools",
       label: "Tools được phép gọi",
-      type: "select",
-      hasMany: true,
-      options: TOOL_OPTIONS,
+      type: "group",
       admin: {
         description:
-          "Chọn các tool agent này được phép dùng. Giữ tối thiểu (5-10) để agent focus + chạy nhanh.",
+          "Chọn tools agent được phép dùng — chia theo nhóm cho dễ tick. Giữ tối thiểu (5-10 tool tổng) để agent focus + nhanh. Click vào ô dropdown của 1 nhóm để bật/tắt từng tool, hoặc tick hết để dùng cả nhóm.",
       },
+      fields: [
+        {
+          name: "workers",
+          label: "👥 Người lao động (Workers)",
+          type: "select",
+          hasMany: true,
+          options: WORKER_TOOLS,
+          admin: { description: "Quản lý hồ sơ LĐ" },
+        },
+        {
+          name: "orders",
+          label: "📦 Đơn tuyển (Orders)",
+          type: "select",
+          hasMany: true,
+          options: ORDER_TOOLS,
+          admin: { description: "Quản lý đơn từ đối tác + workflow W1-W8" },
+        },
+        {
+          name: "orderWorkers",
+          label: "🔗 Đăng ký LĐ vào đơn (Order-Workers)",
+          type: "select",
+          hasMany: true,
+          options: ORDER_WORKER_TOOLS,
+          admin: { description: "M2M giữa worker × order" },
+        },
+        {
+          name: "contracts",
+          label: "📜 Hợp đồng (Contracts)",
+          type: "select",
+          hasMany: true,
+          options: CONTRACT_TOOLS,
+        },
+        {
+          name: "workflowStages",
+          label: "⚙️ Cấu hình workflow stages",
+          type: "select",
+          hasMany: true,
+          options: WORKFLOW_STAGE_TOOLS,
+        },
+        {
+          name: "forms",
+          label: "📋 Form template",
+          type: "select",
+          hasMany: true,
+          options: FORM_TOOLS,
+        },
+        {
+          name: "media",
+          label: "📁 Kho tệp tin (Media)",
+          type: "select",
+          hasMany: true,
+          options: MEDIA_TOOLS,
+          admin: { description: "Tìm file đã upload + đọc nội dung" },
+        },
+        {
+          name: "reminders",
+          label: "🔔 Nhắc nhở (Reminders)",
+          type: "select",
+          hasMany: true,
+          options: REMINDER_TOOLS,
+        },
+        {
+          name: "users",
+          label: "🧑‍💼 Người dùng hệ thống (Users)",
+          type: "select",
+          hasMany: true,
+          options: USER_TOOLS,
+        },
+        {
+          name: "telegramIdentity",
+          label: "💬 Telegram identity",
+          type: "select",
+          hasMany: true,
+          options: TELEGRAM_IDENTITY_TOOLS,
+          admin: { description: "Map @username ↔ telegramUserId" },
+        },
+        {
+          name: "exports",
+          label: "📊 Xuất file (Export)",
+          type: "select",
+          hasMany: true,
+          options: EXPORT_TOOLS,
+          admin: { description: "Excel / CSV / Markdown / JSON" },
+        },
+      ],
     },
     {
       name: "docs",
