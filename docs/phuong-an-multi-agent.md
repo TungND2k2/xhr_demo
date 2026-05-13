@@ -237,13 +237,150 @@ flowchart TD
 ```
 
 Đặc điểm:
-- Mỗi agent có **system prompt riêng** (file `prompts/recruitment.md`, `prompts/training.md`...)
+- Mỗi agent có **system prompt riêng** lưu trong DB (admin sửa qua portal — xem mục 9)
 - Mỗi agent có **set tools nhỏ** (5-10) — không phải tất cả 40 như hiện tại
 - Reply giữ trong cùng topic (Telegram API: `reply_parameters.message_thread_id`)
 
 ---
 
-## 9. So sánh với phương án Portal
+## 9. Quản lý agent qua admin portal (config-driven)
+
+> **Nguyên tắc**: code làm phần engine 1 lần, admin TLG tự tạo/sửa agent qua portal sau đó — không cần dev mỗi khi đổi.
+
+### 9.1. Schema 3 bảng config
+
+```mermaid
+flowchart LR
+    subgraph CodeLayer[Code XOR Cloud - làm 1 lần]
+        T[Tools registry<br/>40+ functions<br/>create_worker, list_orders, ...]
+        E[Pipeline engine<br/>load config + run LLM]
+    end
+
+    subgraph ConfigLayer[Config trên Admin Portal - TLG tự quản]
+        AG[Bảng Agents<br/>name + docs + tools chọn]
+        TP[Bảng TelegramTopics<br/>auto sync khi bot vào group]
+        MP[Bảng AgentTopicMapping<br/>topic - agent dropdown]
+    end
+
+    ConfigLayer -.dùng.-> CodeLayer
+```
+
+**Bảng Agents** — admin tạo/sửa qua portal:
+
+| Trường | Ví dụ |
+|---|---|
+| Name | `recruitment_agent` |
+| Display name | "🧑‍💼 Trợ lý Tuyển dụng" |
+| Active | ✓ |
+| Tools enabled | ☑ create_worker, ☑ list_workers, ☑ update_worker_status, ☐ create_orders... |
+| **Docs (markdown)** | Vai trò + Quy trình + Rules + Hand-off (textarea, admin viết tiếng Việt tự nhiên) |
+
+**Bảng TelegramTopics** — bot tự sync khi vào group:
+
+| Group | Topic | Topic ID |
+|---|---|---|
+| Phòng Nhật Bản | Tuyển dụng | 5 |
+| Phòng Nhật Bản | Đào tạo | 7 |
+| Phòng Hàn Quốc | Tuyển dụng | 5 |
+| Phòng Hành chính | HĐCU | 3 |
+
+**Bảng AgentTopicMapping** — admin nối topic ↔ agent:
+
+| Topic | Agent gán |
+|---|---|
+| Phòng Nhật / Tuyển dụng | recruitment_agent ▼ |
+| Phòng Nhật / Đào tạo | training_agent ▼ |
+| Phòng Hàn / Tuyển dụng | recruitment_agent ▼ (reuse cùng agent) |
+| Phòng Hàn / Đào tạo | training_agent ▼ |
+
+→ **1 agent có thể serve nhiều topic** — đỡ tạo agent giống nhau cho mỗi phòng.
+
+### 9.2. Mỗi agent có docs riêng (markdown)
+
+Trong bảng Agents, trường `docs` là textarea markdown — admin viết tiếng Việt tự nhiên kiểu "training nhân viên mới". Template chuẩn:
+
+```markdown
+# Trợ lý [Tên]
+
+## Vai trò
+[1-2 câu mô tả trợ lý làm gì]
+
+## Phạm vi
+- Việc xử lý: ...
+- Việc không xử lý (chuyển agent khác): ...
+
+## Cách giao tiếp
+- Lịch sự, gọi "anh/chị"
+- Trả lời ngắn gọn
+- ...
+
+## Quy trình nghiệp vụ chính
+
+### Use case 1: [Tên use case]
+1. Bước 1: ...
+2. Bước 2: ...
+
+### Use case 2: ...
+
+## Quy tắc bắt buộc
+- KHÔNG ...
+- LUÔN ...
+
+## Hand-off — khi nào chuyển agent khác
+- Khi status='X' → notify agent Y trong topic Z
+
+## Ví dụ hội thoại
+👤 "..."
+🤖 "..."
+```
+
+Admin copy template, fill nội dung, lưu — agent chạy được ngay không cần redeploy.
+
+### 9.3. Cách Docs trở thành system prompt
+
+Engine tự ghép base prompt (cố định) + docs agent (admin viết) khi runtime:
+
+```mermaid
+flowchart TD
+    BP[Base prompt - cố định, dev viết<br/>• Thời gian VN hiện tại<br/>• Người đang chat: tên, id<br/>• Cú pháp call tool<br/>• Output format JSON]
+    AD[Agent Docs - admin viết<br/>• Vai trò<br/>• Quy trình<br/>• Rules<br/>• Examples]
+
+    BP --> Merge[Ghép prompt]
+    AD --> Merge
+    Merge --> LLM[Gửi vào Claude<br/>tools = subset đã chọn]
+```
+
+Admin chỉ cần viết phần **nghiệp vụ** — phần kỹ thuật (time, context, tool format) do engine lo.
+
+### 9.4. Workflow tạo 1 agent mới
+
+| Bước | Ai làm | Mất bao lâu |
+|---|---|---|
+| 1. Tạo Agent record + chọn tools | Admin TLG | 5 phút |
+| 2. Viết docs (theo template) | Admin TLG (XOR Cloud support viết lần đầu) | 30-60 phút |
+| 3. Map agent ↔ topic | Admin TLG | 2 phút |
+| 4. Test trong topic | Đầu mối nghiệp vụ | 15 phút |
+| **Tổng cho 1 agent** | | **~1 tiếng** |
+
+### 9.5. Self-service cho admin TLG
+
+Sau khi engine build xong, **TLG hoàn toàn tự quản** — không cần XOR Cloud cho các thay đổi sau:
+
+- Sửa prompt agent khi muốn đổi cách nói chuyện
+- Thêm agent mới (vd "Trợ lý Tài sản") — fill form là xong
+- Đổi flow handoff (thêm/bớt bước, đổi thứ tự)
+- Thêm topic mới → map vào agent có sẵn
+- Bật/tắt agent (Active toggle)
+- Thay đổi tool subset cho agent
+
+XOR Cloud chỉ phải can thiệp khi:
+- Thêm **tool mới** chưa có trong registry (cần dev code)
+- Sửa **engine core** (routing logic, hand-off mechanism)
+- Tích hợp **kênh mới** (Zalo, Discord, Email...)
+
+---
+
+## 10. So sánh với phương án Portal
 
 | Tiêu chí | Portal (web app) | Multi-agent qua Telegram |
 |---|---|---|
@@ -260,7 +397,7 @@ flowchart TD
 
 ---
 
-## 10. Lộ trình triển khai
+## 11. Lộ trình triển khai
 
 ```mermaid
 gantt
@@ -290,7 +427,7 @@ gantt
 
 ---
 
-## 11. Điều TLG cần quyết trước khi build
+## 12. Điều TLG cần quyết trước khi build
 
 | Câu hỏi | Cần TLG trả lời |
 |---|---|
@@ -303,7 +440,7 @@ gantt
 
 ---
 
-## 12. Rủi ro & giải pháp
+## 13. Rủi ro & giải pháp
 
 | Rủi ro | Giải pháp |
 |---|---|
@@ -317,7 +454,7 @@ gantt
 
 ---
 
-## 13. Kết luận đề xuất
+## 14. Kết luận đề xuất
 
 **Đi theo phương án Multi-Agent theo topic Telegram** vì:
 - ✅ Đúng ý sếp tổng (không cần web portal)
