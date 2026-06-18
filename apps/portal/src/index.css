@@ -1,0 +1,135 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg-main: #f8fafc;
+  --sidebar-bg: #ffffff;
+  --card-bg: #ffffff;
+  --accent-blue: #3b82f6;
+  --accent-blue-rgb: 59, 130, 246;
+  --accent-glow: rgba(59, 130, 246, 0.15);
+  --text-main: #1e293b;
+  --text-muted: #64748b;
+  --border-color: rgba(0, 0, 0, 0.08);
+}
+
+.dark {
+  --bg-main: #0a0b0e;
+  --sidebar-bg: #121212;
+  --card-bg: #1a1a1a;
+  --accent-blue: #00f2ff;
+  --accent-blue-rgb: 0, 242, 255;
+  --accent-glow: rgba(0, 242, 255, 0.4);
+  --accent-purple: #bc13fe;
+  --accent-purple-rgb: 188, 19, 254;
+  --text-main: #f0f2f5;
+  --text-muted: #94a3b8;
+  --border-color: rgba(255, 255, 255, 0.05);
+  --neon-cyan: #00f2ff;
+  --neon-purple: #bc13fe;
+}
+
+body {
+  @apply bg-[var(--bg-main)] text-[var(--text-main)] font-sans antialiased overflow-hidden transition-colors duration-500;
+  background-image: radial-gradient(circle at 50% -20%, var(--accent-glow), transparent 70%),
+                    radial-gradient(circle at 0% 100%, rgba(var(--accent-purple-rgb), 0.1), transparent 50%);
+}
+
+.neon-border-cyan {
+  box-shadow: 0 0 10px rgba(0, 242, 255, 0.3), inset 0 0 5px rgba(0, 242, 255, 0.1);
+}
+
+.neon-border-purple {
+  box-shadow: 0 0 10px rgba(188, 19, 254, 0.3), inset 0 0 5px rgba(188, 19, 254, 0.1);
+}
+
+.neon-text-cyan {
+  text-shadow: 0 0 8px rgba(0, 242, 255, 0.6);
+}
+
+.neon-text-purple {
+  text-shadow: 0 0 8px rgba(188, 19, 254, 0.6);
+}
+
+.glass-morphism {
+  background: rgba(255, 255, 255, 0.03);
+  backdrop-filter: blur(16px) saturate(180%);
+  -webkit-backdrop-filter: blur(16px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.glass-card {
+  background: var(--sidebar-bg);
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--border-color);
+  @apply rounded-3xl transition-all duration-300;
+}
+
+.glass-card:hover {
+  border-color: rgba(var(--accent-blue-rgb), 0.2);
+  background: var(--sidebar-bg);
+  @apply shadow-lg;
+}
+
+.sidebar-item-active {
+  background: linear-gradient(90deg, var(--accent-glow) 0%, transparent 100%);
+  border-left: 3px solid var(--accent-blue);
+  color: var(--accent-blue);
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 5px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: 10px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
+}
+
+.shimmer {
+  background: linear-gradient(90deg, transparent, var(--border-color), transparent);
+  background-size: 200% 100%;
+  animation: shimmer 2s infinite;
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.blue-glow {
+  box-shadow: 0 0 40px rgba(37, 99, 235, 0.15);
+}
+
+.status-dot {
+  @apply w-2 h-2 rounded-full;
+}
+
+.status-online { @apply bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]; }
+.status-busy { @apply bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.6)]; }
+.status-offline { @apply bg-slate-600; }
+
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { scrollbar-width: none; }
+
+/* Print: chỉ in phần .print-area, ẩn sidebar + header + nút action.
+ * Người dùng chọn "Save as PDF" trong dialog Print để xuất PDF. */
+@media print {
+  body { background: white; color: black; overflow: visible; }
+  .no-print, aside, header, .filter-panel-wrapper, button { display: none !important; }
+  .print-area { padding: 0; }
+  .glass-card { box-shadow: none; border: 1px solid #ddd; background: white !important; }
+  table { page-break-inside: auto; }
+  tr { page-break-inside: avoid; page-break-after: auto; }
+}
