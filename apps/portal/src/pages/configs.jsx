@@ -484,6 +484,74 @@ export const PAGES = {
     },
   },
 
+  roles: {
+    title: 'Vai trò',
+    subtitle: 'Phân quyền chi tiết theo collection × action — admin tạo & gán cho từng user',
+    collection: 'roles',
+    sort: 'name',
+    columns: [
+      { key: 'name', label: 'Tên vai trò', render: (r) => (
+        <span className="font-semibold">
+          {r.isSystem && <span className="mr-1 text-amber-500" title="Vai trò hệ thống">⛨</span>}
+          {r.name ?? '—'}
+        </span>
+      ) },
+      { key: 'description', label: 'Mô tả', render: (r) => <span className="text-slate-500 text-xs truncate inline-block max-w-[300px]">{r.description ?? '—'}</span> },
+      { key: 'markets', label: 'Thị trường', render: (r) => Array.isArray(r.markets) && r.markets.length > 0 ? r.markets.map(m => m.toUpperCase()).join(', ') : 'Tất cả' },
+      { key: 'isSystem', label: 'Hệ thống', render: (r) => r.isSystem ? '⛨' : '' },
+    ],
+  },
+
+  offices: {
+    title: 'Văn phòng',
+    subtitle: 'Chi nhánh / văn phòng TLG — LĐ chọn trong form đăng ký',
+    collection: 'offices',
+    sort: 'name',
+    columns: [
+      { key: 'officeCode', label: 'Mã', render: (o) => <span className="font-mono text-blue-500">{o.officeCode ?? '—'}</span> },
+      { key: 'name', label: 'Tên VP', render: (o) => <span className="font-semibold">{o.name ?? '—'}</span> },
+      { key: 'country', label: 'Nước', render: (o) => (o.country ?? '—').toUpperCase() },
+      { key: 'manager', label: 'Trưởng VP', render: (o) => typeof o.manager === 'object' ? (o.manager?.fullName ?? '—') : '—' },
+      { key: 'phone', label: 'SĐT', render: (o) => o.phone ?? '—' },
+      { key: 'active', label: 'Hoạt động', render: (o) => o.active ? '✅' : '⏸' },
+    ],
+    headerSummary: (o) => ({
+      title: o.name ?? o.officeCode ?? o.id,
+      subtitle: [o.officeCode, (o.country ?? '').toUpperCase()].filter(Boolean).join(' · '),
+      badges: [{ label: o.active ? '✅ Hoạt động' : '⏸ Tạm ngưng', color: o.active ? 'green' : 'slate' }],
+    }),
+    detailSections: (o) => {
+      const E = (key, type, options) => ({ edit: { key, type, options } });
+      const COUNTRY_OPTS = [['vn','🇻🇳 Việt Nam'],['jp','🇯🇵 Nhật'],['kr','🇰🇷 Hàn'],['tw','🇹🇼 Đài'],['de','🇩🇪 Đức'],['other','Khác']];
+      const managerEmp = typeof o.manager === 'object' ? o.manager : null;
+      return [
+        {
+          title: 'Thông tin chung',
+          fields: [
+            ['Mã VP', o.officeCode, { mono: true }],
+            ['Tên VP', o.name, E('name', 'text')],
+            ['Nước', (o.country ?? '').toUpperCase(), E('country', 'select', COUNTRY_OPTS)],
+            ['Hoạt động', o.active ? '✅ Có' : '❌ Không'],
+          ],
+        },
+        {
+          title: 'Liên hệ',
+          fields: [
+            ['SĐT', o.phone, E('phone', 'text')],
+            ['Email', o.email, E('email', 'text')],
+            ['Trưởng VP', managerEmp?.fullName],
+          ],
+        },
+        {
+          title: 'Địa chỉ',
+          wide: true,
+          fields: [['Trụ sở', o.address, { pre: true, edit: { key: 'address', type: 'textarea' } }]],
+        },
+        ...(o.notes ? [{ title: 'Ghi chú', wide: true, fields: [['', o.notes, { pre: true }]] }] : []),
+      ];
+    },
+  },
+
   partners: {
     title: 'Đối tác',
     subtitle: 'Nghiệp đoàn / employer các thị trường',

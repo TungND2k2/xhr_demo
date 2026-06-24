@@ -17,6 +17,13 @@ import { exportTools } from "./export.tools.js";
 import { calendarTools } from "./calendars.tools.js";
 import { assetTools } from "./assets.tools.js";
 import { emailTools } from "./email.tools.js";
+import { partnerTools } from "./partners.tools.js";
+import { supplyContractTools } from "./supply-contracts.tools.js";
+import { vectorSearchTools } from "./vector-search.tools.js";
+import { employeeTools } from "./employees.tools.js";
+import { formInviteTools } from "./form-invites.tools.js";
+import { officialDocumentTools } from "./official-documents.tools.js";
+import { assetWorkflowTools } from "./assets.workflow.js";
 
 import { advanceOrderStatus } from "./orders.workflow.js";
 import { orderProgressSummary } from "./orders.summary.js";
@@ -53,6 +60,29 @@ export const allTools = [
 
   // Asset — quản lý tài sản công ty (laptop, xe, máy may...).
   ...assetTools,            // 5: list/get/create/update/delete assets
+
+  // Asset workflow — bulk release khi nhân viên nghỉ việc, tra theo nhân viên.
+  ...assetWorkflowTools,    // 2: bulk_release_assets, list_assets_by_employee
+
+  // Partner — danh sách đối tác/xí nghiệp nước ngoài (đối tác Order).
+  ...partnerTools,          // 5: list/get/create/update/delete partners
+
+  // SupplyContract (HĐCU) — HĐ khung TLG ↔ Partner. Có tool AI extract
+  // từ Media.extractedText.
+  ...supplyContractTools,   // 6: 5 CRUD + extract_supply_contract
+
+  // Vector search — semantic similarity, tra theo ngữ nghĩa (Qdrant).
+  // Dùng thay list_*/get_* khi data lớn để tránh overflow context.
+  ...vectorSearchTools,     // 1: semantic_search
+
+  // Employee — nhân sự nội bộ TLG (KHÁC Users login + Workers XKLĐ).
+  ...employeeTools,         // 5: list/get/create/update/delete employees
+
+  // FormInvites — tạo link form đăng ký cho NLĐ qua Telegram.
+  ...formInviteTools,       // 1: generate_form_link
+
+  // OfficialDocuments — Công văn đến/đi/nội bộ TLG.
+  ...officialDocumentTools, // 5: list/get/create/update/delete official-documents
 
   // Email — gửi email cho lãnh đạo (chị Hương + chị Hoa) qua SMTP.
   ...emailTools,            // 1: send_email

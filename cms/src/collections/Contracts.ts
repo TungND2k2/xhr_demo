@@ -1,5 +1,18 @@
 import type { CollectionConfig } from "payload";
 import { generateContractCode } from "../hooks/contracts/generate-code";
+import { trackCoeReceived } from "../hooks/contracts/track-coe-received";
+import { syncArrivalCalendar } from "../hooks/contracts/sync-arrival-calendar";
+import { accessReadScoped, accessCreate, accessUpdate, accessDelete } from "../utilities/role-access";
+import { makeSyncMediaBacklinks, makeRemoveAllMediaBacklinks } from "../hooks/shared/sync-media-backlinks";
+
+const extractContractMedia = (doc: any) => [
+  doc?.contractFile,
+  doc?.visaFile,
+  doc?.coeFile,
+  doc?.flightTicketFile,
+  ...(Array.isArray(doc?.payments) ? doc.payments.map((p: any) => p?.receiptFile) : []),
+  ...(Array.isArray(doc?.otherDocuments) ? doc.otherDocuments.map((d: any) => d?.file) : []),
+];
 
 /**
  * Contracts — hợp đồng đã ký giữa worker + đối tác (employer trong order).
@@ -27,19 +40,21 @@ export const Contracts: CollectionConfig = {
     group: "Tài chính & Hợp đồng",
   },
   access: {
-    read: ({ req: { user } }) => !!user,
-    create: ({ req: { user } }) =>
-      ["admin", "manager", "visa_specialist", "accountant"].includes(
-        user?.role ?? "",
-      ),
-    update: ({ req: { user } }) =>
-      ["admin", "manager", "visa_specialist", "accountant"].includes(
-        user?.role ?? "",
-      ),
-    delete: ({ req: { user } }) => user?.role === "admin",
+    read: accessReadScoped("contracts"),
+    create: accessCreate("contracts", ["admin", "manager", "visa_specialist", "accountant"]),
+    update: accessUpdate("contracts", ["admin", "manager", "visa_specialist", "accountant"]),
+    delete: accessDelete("contracts", ["admin"]),
   },
   hooks: {
     beforeChange: [generateContractCode],
+    afterChange: [
+      trackCoeReceived,
+      syncArrivalCalendar,
+      makeSyncMediaBacklinks({ ownerSlug: "contracts", extract: extractContractMedia }),
+    ],
+    afterDelete: [
+      makeRemoveAllMediaBacklinks({ ownerSlug: "contracts", extract: extractContractMedia }),
+    ],
   },
   fields: [
     {
@@ -362,6 +377,31 @@ export const Contracts: CollectionConfig = {
               type: "upload",
               relationTo: "media",
               admin: { description: "Certificate of Eligibility / giấy phép tương đương" },
+            },
+            {
+              type: "row",
+              fields: [
+                {
+                  name: "coeRequestedAt",
+                  label: "Ngày yêu cầu COE",
+                  type: "date",
+                  admin: {
+                    width: "50%",
+                    date: { pickerAppearance: "dayOnly" },
+                    description: "Ngày TLG gửi yêu cầu COE cho đối tác Nhật. Dùng tính SLA W6.",
+                  },
+                },
+                {
+                  name: "coeReceivedAt",
+                  label: "Ngày nhận COE",
+                  type: "date",
+                  admin: {
+                    width: "50%",
+                    date: { pickerAppearance: "dayOnly" },
+                    description: "Ngày COE thực tế về tay TLG (từ đối tác hoặc Cục XNC).",
+                  },
+                },
+              ],
             },
             {
               name: "flightTicketFile",

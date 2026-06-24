@@ -37,9 +37,8 @@ export const Users: CollectionConfig = {
     },
     {
       name: "role",
-      label: "Vai trò",
+      label: "Vai trò (cũ — enum)",
       type: "select",
-      required: true,
       defaultValue: "recruiter",
       options: [
         { label: "👑 Chủ DN / GĐ (Admin)", value: "admin" },
@@ -50,6 +49,20 @@ export const Users: CollectionConfig = {
         { label: "💰 Kế toán", value: "accountant" },
         { label: "🏥 Y tế / Khám SK", value: "medical" },
       ],
+      admin: {
+        description:
+          "Field cũ — sẽ deprecated. Field `roleRef` (Vai trò mới) ưu tiên hơn nếu set. Sau khi migrate xong toàn bộ user → sẽ xoá field này.",
+      },
+    },
+    {
+      name: "roleRef",
+      label: "Vai trò (mới — relationship)",
+      type: "relationship",
+      relationTo: "roles",
+      admin: {
+        description:
+          "Vai trò + ma trận quyền chi tiết. Tạo / sửa role trong portal /roles hoặc admin /collections/roles. Ưu tiên hơn role cũ nếu set.",
+      },
     },
     {
       name: "isActive",

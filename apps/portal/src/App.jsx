@@ -6,7 +6,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   LayoutDashboard, Users as UsersIcon, BarChart3, Settings, Sun, Moon, Search,
   FileText, Briefcase, Building2, Inbox, Calendar, Mail, Bot, MessageSquare, Users2,
-  Boxes, Folder, ClipboardList, Plus,
+  Boxes, Folder, ClipboardList, Plus, Shield, LogOut,
 } from 'lucide-react';
 
 import Dashboard from './pages/Dashboard';
@@ -19,6 +19,9 @@ import MediaDetail from './pages/MediaDetail';
 import MediaGallery from './pages/MediaGallery';
 import AssetsPage from './pages/AssetsPage';
 import AssetDetailPage from './pages/AssetDetailPage';
+import RoleDetailPage from './pages/RoleDetailPage';
+import LoginPage from './pages/LoginPage';
+import useAuth from './hooks/useAuth';
 import PrintableFormDetail from './pages/PrintableFormDetail';
 import WorkerHSNForm from './pages/WorkerHSNForm';
 import CalendarView from './pages/CalendarView';
@@ -98,6 +101,7 @@ const NAV_GROUPS = [
       { path: '/official-documents', icon: Inbox, label: 'Công văn' },
       { path: '/employees', icon: Users2, label: 'Nhân sự nội bộ' },
       { path: '/assets', icon: Boxes, label: 'Tài sản' },
+      { path: '/offices', icon: Building2, label: 'Văn phòng' },
       { path: '/calendars', icon: Calendar, label: 'Lịch họp' },
       { path: '/reminders', icon: ClipboardList, label: 'Nhắc việc' },
       { path: '/forms', icon: FileText, label: 'Form / Lời mời' },
@@ -113,6 +117,7 @@ const NAV_GROUPS = [
     label: 'Telegram Bot',
     items: [
       { path: '/agents', icon: Bot, label: 'AI Agents' },
+      { path: '/roles', icon: Shield, label: 'Vai trò' },
       { path: '/telegram-topics', icon: MessageSquare, label: 'Topics' },
       { path: '/telegram-groups', icon: Mail, label: 'Nhóm' },
     ],
@@ -144,6 +149,7 @@ const SidebarNavLink = ({ to, icon: Icon, label, end }) => (
 );
 
 function Layout({ children }) {
+  const { user, logout } = useAuth();
   const [isDark, setIsDark] = useState(() => {
     if (typeof window === 'undefined') return false;
     const saved = localStorage.getItem('theme');
@@ -181,16 +187,24 @@ function Layout({ children }) {
 
         <div className="p-6 border-t border-[var(--border-color)]">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-blue-600/10 border border-blue-500/20 flex items-center justify-center">
+            <div className="flex items-center gap-3 min-w-0 flex-1">
+              <div className="w-10 h-10 rounded-full bg-blue-600/10 border border-blue-500/20 flex items-center justify-center shrink-0">
                 <UsersIcon size={16} className="text-blue-500" />
               </div>
-              <div className="leading-tight">
-                <p className="text-sm font-bold text-[var(--text-main)]">Quản trị viên</p>
-                <p className="text-[10px] text-slate-500">Demo (Sprint 1)</p>
+              <div className="leading-tight min-w-0">
+                <p className="text-sm font-bold text-[var(--text-main)] truncate">{user?.displayName ?? user?.email ?? 'Người dùng'}</p>
+                <p className="text-[10px] text-slate-500 truncate">
+                  {typeof user?.roleRef === 'object' && user?.roleRef?.name ? user.roleRef.name : (user?.role ?? '—')}
+                </p>
               </div>
             </div>
-            <Settings size={18} className="text-slate-500" />
+            <button
+              onClick={logout}
+              className="p-2 rounded-lg text-slate-500 hover:text-red-500 hover:bg-red-500/10 transition-colors shrink-0"
+              title="Đăng xuất"
+            >
+              <LogOut size={16} />
+            </button>
           </div>
         </div>
       </aside>
@@ -259,6 +273,13 @@ function AssetDetailRoute() {
   const { id } = useParams();
   const navigate = useNavigate();
   return <AssetDetailPage recordId={id} onBack={() => navigate('/assets')} />;
+}
+
+// Role detail — checkbox grid permissions matrix
+function RoleDetailRoute() {
+  const { id } = useParams();
+  const navigate = useNavigate();
+  return <RoleDetailPage recordId={id} onBack={() => navigate('/roles')} />;
 }
 
 // Employees list — SimpleListPage + nút Tạo + FormModal
@@ -354,38 +375,64 @@ function NotFound() {
   );
 }
 
+function ProtectedRoutes() {
+  const { isAuthenticated, loading } = useAuth();
+  const location = useLocation();
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[var(--bg-main)]">
+        <div className="text-sm text-slate-500">Đang kiểm tra phiên đăng nhập...</div>
+      </div>
+    );
+  }
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace state={{ from: location }} />;
+  }
+  return (
+    <Layout>
+      <Routes>
+        <Route path="/" element={<Dashboard />} />
+        <Route path="/reports" element={<Reports />} />
+
+        <Route path="/workers" element={<WorkersRoute />} />
+        <Route path="/workers/:id" element={<WorkerDetailRoute />} />
+
+        <Route path="/calendars" element={<CalendarView />} />
+        <Route path="/calendars/:id" element={<CollectionDetailRoute tab="calendars" />} />
+        <Route path="/employees" element={<EmployeesListRoute />} />
+        <Route path="/employees/:id" element={<EmployeeDetailRoute />} />
+        <Route path="/official-documents/:id" element={<OfficialDocumentRoute />} />
+        <Route path="/media" element={<MediaGallery />} />
+        <Route path="/media/:id" element={<CollectionDetailRoute tab="media" />} />
+
+        <Route path="/assets" element={<AssetsPage />} />
+        <Route path="/assets/:id" element={<AssetDetailRoute />} />
+
+        <Route path="/roles/:id" element={<RoleDetailRoute />} />
+
+        {Object.keys(PAGES).filter((t) => t !== 'workers' && t !== 'calendars' && t !== 'media' && t !== 'assets' && t !== 'employees' && t !== 'roles').map((tab) => (
+          <React.Fragment key={tab}>
+            <Route path={`/${tab}`} element={<CollectionListRoute tab={tab} />} />
+            <Route path={`/${tab}/:id`} element={<CollectionDetailRoute tab={tab} />} />
+          </React.Fragment>
+        ))}
+
+        <Route path="/roles" element={<CollectionListRoute tab="roles" />} />
+
+        <Route path="*" element={<NotFound />} />
+      </Routes>
+    </Layout>
+  );
+}
+
 export default function App() {
   return (
     <BrowserRouter>
-      <Layout>
-        <Routes>
-          <Route path="/" element={<Dashboard />} />
-          <Route path="/reports" element={<Reports />} />
-
-          <Route path="/workers" element={<WorkersRoute />} />
-          <Route path="/workers/:id" element={<WorkerDetailRoute />} />
-
-          <Route path="/calendars" element={<CalendarView />} />
-          <Route path="/calendars/:id" element={<CollectionDetailRoute tab="calendars" />} />
-          <Route path="/employees" element={<EmployeesListRoute />} />
-          <Route path="/employees/:id" element={<EmployeeDetailRoute />} />
-          <Route path="/official-documents/:id" element={<OfficialDocumentRoute />} />
-          <Route path="/media" element={<MediaGallery />} />
-          <Route path="/media/:id" element={<CollectionDetailRoute tab="media" />} />
-
-          <Route path="/assets" element={<AssetsPage />} />
-          <Route path="/assets/:id" element={<AssetDetailRoute />} />
-
-          {Object.keys(PAGES).filter((t) => t !== 'workers' && t !== 'calendars' && t !== 'media' && t !== 'assets' && t !== 'employees').map((tab) => (
-            <React.Fragment key={tab}>
-              <Route path={`/${tab}`} element={<CollectionListRoute tab={tab} />} />
-              <Route path={`/${tab}/:id`} element={<CollectionDetailRoute tab={tab} />} />
-            </React.Fragment>
-          ))}
-
-          <Route path="*" element={<NotFound />} />
-        </Routes>
-      </Layout>
+      <Routes>
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/*" element={<ProtectedRoutes />} />
+      </Routes>
     </BrowserRouter>
   );
 }
+

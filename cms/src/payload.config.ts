@@ -26,6 +26,14 @@ import { TelegramTopics } from "./collections/TelegramTopics";
 import { Agents } from "./collections/Agents";
 import { Calendars } from "./collections/Calendars";
 import { Assets } from "./collections/Assets";
+import { Partners } from "./collections/Partners";
+import { Offices } from "./collections/Offices";
+import { Roles } from "./collections/Roles";
+import { SupplyContracts } from "./collections/SupplyContracts";
+import { Employees } from "./collections/Employees";
+import { FormInvites } from "./collections/FormInvites";
+import { OfficialDocuments } from "./collections/OfficialDocuments";
+import { EmailSettings } from "./globals/EmailSettings";
 
 const filename = fileURLToPath(import.meta.url);
 const dirname = path.dirname(filename);
@@ -54,6 +62,7 @@ export default buildConfig({
     // Custom CSS — load qua app/(payload)/custom.scss đã wire trong layout
   },
   collections: [
+    Roles,
     Users,
     Workers,
     Orders,
@@ -71,7 +80,14 @@ export default buildConfig({
     Agents,
     Calendars,
     Assets,
+    Partners,
+    Offices,
+    SupplyContracts,
+    Employees,
+    FormInvites,
+    OfficialDocuments,
   ],
+  globals: [EmailSettings],
   plugins: [
     // S3-compatible storage cho collection media. Endpoint do .env định nghĩa
     // (xorcloud / R2 / MinIO / AWS đều dùng chung adapter này). forcePathStyle

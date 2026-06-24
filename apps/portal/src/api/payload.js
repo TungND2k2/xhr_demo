@@ -1,11 +1,59 @@
-// Payload REST client cho portal khách hàng.
-// Token-based auth: POST /api/users/login → cache JWT → gửi qua Authorization
-// header. Cookies không qua được Vite proxy cross-domain.
+// Payload REST client. JWT-based auth:
+//  - User login qua /login page → POST /api/users/login → token vào localStorage.
+//  - Mỗi fetch attach `Authorization: JWT <token>`.
+//  - 401 trả về → clear token + reload (LoginPage sẽ redirect).
+//
+// Backward compat: nếu localStorage rỗng nhưng có VITE_DEV_EMAIL/PASSWORD
+// trong env (dev local), tự login bằng cred đó. Production = đã build mà
+// không có VITE_DEV → bắt buộc qua /login.
 
 const API_BASE = '/api';
+const TOKEN_KEY = 'xhr-portal-token';
+const USER_KEY = 'xhr-portal-user';
 
 let _token = null;
+let _user = null;
 let _loginPromise = null;
+const _listeners = new Set();
+
+// Khởi tạo từ localStorage (giữ session qua reload)
+if (typeof window !== 'undefined') {
+  try {
+    _token = window.localStorage.getItem(TOKEN_KEY) ?? null;
+    const userJson = window.localStorage.getItem(USER_KEY);
+    if (userJson) _user = JSON.parse(userJson);
+  } catch {
+    _token = null;
+    _user = null;
+  }
+}
+
+function notify() {
+  for (const cb of _listeners) {
+    try { cb({ token: _token, user: _user }); } catch { /* ignore */ }
+  }
+}
+
+export function subscribeAuth(cb) {
+  _listeners.add(cb);
+  return () => _listeners.delete(cb);
+}
+
+export function getAuthState() {
+  return { token: _token, user: _user };
+}
+
+function persistAuth(token, user) {
+  _token = token ?? null;
+  _user = user ?? null;
+  try {
+    if (token) window.localStorage.setItem(TOKEN_KEY, token);
+    else window.localStorage.removeItem(TOKEN_KEY);
+    if (user) window.localStorage.setItem(USER_KEY, JSON.stringify(user));
+    else window.localStorage.removeItem(USER_KEY);
+  } catch { /* ignore quota / private mode */ }
+  notify();
+}
 
 function devCreds() {
   return {
@@ -14,30 +62,53 @@ function devCreds() {
   };
 }
 
-async function ensureLogin() {
+/** Login một user (gọi từ LoginPage). Throw nếu sai cred. */
+export async function login(email, password) {
+  const res = await fetch(`${API_BASE}/users/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password }),
+  });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok || !json.token) {
+    const msg = json?.errors?.[0]?.message || json?.message || 'Email hoặc mật khẩu không đúng';
+    throw new Error(msg);
+  }
+  persistAuth(json.token, json.user ?? null);
+  return json.user ?? null;
+}
+
+/** Logout: clear token + user, redirect /login. */
+export function logout() {
+  persistAuth(null, null);
+}
+
+/** Refresh user info (vd sau khi đổi role). */
+export async function refreshMe() {
+  if (!_token) return null;
+  const res = await fetch(`${API_BASE}/users/me`, {
+    headers: { Authorization: `JWT ${_token}` },
+  });
+  if (!res.ok) {
+    persistAuth(null, null);
+    return null;
+  }
+  const json = await res.json();
+  const user = json?.user ?? null;
+  persistAuth(_token, user);
+  return user;
+}
+
+async function ensureLoginLegacyFallback() {
   if (_token) return _token;
   if (_loginPromise) return _loginPromise;
   const creds = devCreds();
-  if (!creds.email || !creds.password) {
-    console.warn('[portal] Thiếu VITE_DEV_EMAIL / VITE_DEV_PASSWORD trong .env.local');
-    return null;
-  }
+  if (!creds.email || !creds.password) return null;
   _loginPromise = (async () => {
     try {
-      const res = await fetch(`${API_BASE}/users/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(creds),
-      });
-      if (!res.ok) {
-        console.error('[portal] Login fail HTTP', res.status, await res.text().catch(() => ''));
-        return null;
-      }
-      const j = await res.json();
-      _token = j.token || null;
+      const u = await login(creds.email, creds.password);
       return _token;
-    } catch (e) {
-      console.error('[portal] Login error', e);
+    } catch {
       return null;
     } finally {
       _loginPromise = null;
@@ -51,11 +122,9 @@ function flattenWhere(where, params, prefix = 'where') {
     if (v == null) continue;
     const key = `${prefix}[${k}]`;
     if (Array.isArray(v)) {
-      // Mảng object (vd where[and] = [{...}, {...}]) — đệ quy theo index
       if (v.length > 0 && typeof v[0] === 'object' && v[0] !== null) {
         v.forEach((item, idx) => flattenWhere(item, params, `${key}[${idx}]`));
       } else {
-        // Mảng scalar (vd in:[a,b,c]) — comma-joined
         params.set(key, v.join(','));
       }
     } else if (typeof v === 'object') {
@@ -67,10 +136,16 @@ function flattenWhere(where, params, prefix = 'where') {
 }
 
 export async function fetchPayload(path, init = {}) {
-  const token = await ensureLogin();
+  let token = _token;
+  if (!token) token = await ensureLoginLegacyFallback();
   const headers = { ...(init.headers || {}) };
   if (token) headers.Authorization = `JWT ${token}`;
-  return fetch(`${API_BASE}${path}`, { ...init, headers });
+  const res = await fetch(`${API_BASE}${path}`, { ...init, headers });
+  // 401 → token hết hạn / bị revoke → clear + để UI redirect /login
+  if (res.status === 401 && token) {
+    persistAuth(null, null);
+  }
+  return res;
 }
 
 export async function countDocs(collection, where = {}) {

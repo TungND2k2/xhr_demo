@@ -1,6 +1,11 @@
 import type { CollectionConfig } from "payload";
 import { generateOrderCode } from "../hooks/orders/generate-code";
 import { trackStageTiming } from "../hooks/orders/track-stage-timing";
+import { makeSyncMediaBacklinks, makeRemoveAllMediaBacklinks } from "../hooks/shared/sync-media-backlinks";
+import { accessReadScoped, accessCreate, accessUpdate, accessDelete } from "../utilities/role-access";
+
+const extractOrderMedia = (doc: any) =>
+  Array.isArray(doc?.orderDocuments) ? doc.orderDocuments.map((d: any) => d?.file) : [];
 
 /**
  * Orders — đơn tuyển từ đối tác (xí nghiệp / công ty / chủ tàu) ở
@@ -29,17 +34,19 @@ export const Orders: CollectionConfig = {
     group: "Tuyển dụng",
   },
   access: {
-    read: ({ req: { user } }) => !!user,
-    create: ({ req: { user } }) =>
-      ["admin", "manager", "recruiter"].includes(user?.role ?? ""),
-    update: ({ req: { user } }) =>
-      ["admin", "manager", "recruiter", "trainer", "visa_specialist"].includes(
-        user?.role ?? "",
-      ),
-    delete: ({ req: { user } }) => user?.role === "admin",
+    read: accessReadScoped("orders"),
+    create: accessCreate("orders", ["admin", "manager", "recruiter"]),
+    update: accessUpdate("orders", ["admin", "manager", "recruiter", "trainer", "visa_specialist"]),
+    delete: accessDelete("orders", ["admin"]),
   },
   hooks: {
     beforeChange: [generateOrderCode, trackStageTiming],
+    afterChange: [
+      makeSyncMediaBacklinks({ ownerSlug: "orders", extract: extractOrderMedia }),
+    ],
+    afterDelete: [
+      makeRemoveAllMediaBacklinks({ ownerSlug: "orders", extract: extractOrderMedia }),
+    ],
   },
   fields: [
     {
@@ -92,11 +99,26 @@ export const Orders: CollectionConfig = {
               type: "row",
               fields: [
                 {
+                  name: "partner",
+                  label: "Đối tác (record)",
+                  type: "relationship",
+                  relationTo: "partners",
+                  admin: {
+                    width: "33%",
+                    description:
+                      "Chọn từ danh sách đối tác đã đăng ký. Để trống → dùng employer text bên dưới (legacy).",
+                  },
+                },
+                {
                   name: "employer",
-                  label: "Đối tác / xí nghiệp",
+                  label: "Đối tác / xí nghiệp (text)",
                   type: "text",
                   required: true,
-                  admin: { width: "67%", description: "Tên xí nghiệp / công ty / chủ tàu" },
+                  admin: {
+                    width: "34%",
+                    description:
+                      "Auto-fill từ Partner.name khi chọn partner. Vẫn required cho data cũ.",
+                  },
                 },
                 {
                   name: "employerCountry",

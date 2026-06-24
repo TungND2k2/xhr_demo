@@ -1,5 +1,17 @@
 import type { CollectionConfig } from "payload";
 import { generateWorkerCode } from "../hooks/workers/generate-code";
+import { trackStatusChangesBefore, trackStatusChangesAfter } from "../hooks/workers/track-status-changes";
+import { makeSyncMediaBacklinks, makeRemoveAllMediaBacklinks } from "../hooks/shared/sync-media-backlinks";
+import { accessReadScoped, accessCreate, accessUpdate, accessDelete } from "../utilities/role-access";
+
+const extractWorkerMedia = (doc: any) => [
+  doc?.passportScan,
+  doc?.nationalIdScan,
+  doc?.photo,
+  doc?.cvFile,
+  doc?.healthCertFile,
+  ...(Array.isArray(doc?.documents) ? doc.documents.map((d: any) => d?.file) : []),
+];
 
 /**
  * Workers — người lao động đăng ký XKLĐ.
@@ -26,15 +38,20 @@ export const Workers: CollectionConfig = {
     group: "Tuyển dụng",
   },
   access: {
-    read: ({ req: { user } }) => !!user,
-    create: ({ req: { user } }) =>
-      ["admin", "manager", "recruiter"].includes(user?.role ?? ""),
-    update: ({ req: { user } }) =>
-      ["admin", "manager", "recruiter", "trainer"].includes(user?.role ?? ""),
-    delete: ({ req: { user } }) => user?.role === "admin",
+    read: accessReadScoped("workers"),
+    create: accessCreate("workers", ["admin", "manager", "recruiter"]),
+    update: accessUpdate("workers", ["admin", "manager", "recruiter", "trainer"]),
+    delete: accessDelete("workers", ["admin"]),
   },
   hooks: {
-    beforeChange: [generateWorkerCode],
+    beforeChange: [generateWorkerCode, trackStatusChangesBefore],
+    afterChange: [
+      trackStatusChangesAfter,
+      makeSyncMediaBacklinks({ ownerSlug: "workers", extract: extractWorkerMedia }),
+    ],
+    afterDelete: [
+      makeRemoveAllMediaBacklinks({ ownerSlug: "workers", extract: extractWorkerMedia }),
+    ],
   },
   fields: [
     {
@@ -420,10 +437,105 @@ export const Workers: CollectionConfig = {
           ],
         },
 
+        // ── Đào tạo ──────────────────────────────────────────
+        {
+          label: "Đào tạo",
+          fields: [
+            {
+              type: "row",
+              fields: [
+                {
+                  name: "trainingGroup",
+                  label: "Lớp/Nhóm đào tạo",
+                  type: "text",
+                  admin: { width: "50%", placeholder: "vd: Lớp N4-2024-A" },
+                },
+                {
+                  name: "trainingStartDate",
+                  label: "Ngày vào lớp",
+                  type: "date",
+                  admin: { width: "25%", date: { pickerAppearance: "dayOnly" } },
+                },
+                {
+                  name: "trainingEndDate",
+                  label: "Ngày kết thúc",
+                  type: "date",
+                  admin: { width: "25%", date: { pickerAppearance: "dayOnly" } },
+                },
+              ],
+            },
+            {
+              name: "trainingAttendance",
+              label: "Điểm danh",
+              type: "array",
+              labels: { singular: "Buổi", plural: "Buổi" },
+              admin: {
+                description: "Mỗi buổi 1 dòng. Có thể export Excel báo cáo lớp.",
+              },
+              fields: [
+                {
+                  type: "row",
+                  fields: [
+                    { name: "date", label: "Ngày", type: "date", required: true, admin: { width: "30%", date: { pickerAppearance: "dayOnly" } } },
+                    {
+                      name: "status",
+                      label: "Trạng thái",
+                      type: "select",
+                      required: true,
+                      options: [
+                        { label: "✅ Có mặt", value: "present" },
+                        { label: "❌ Vắng có phép", value: "excused" },
+                        { label: "🚫 Vắng không phép", value: "absent" },
+                        { label: "🤒 Ốm", value: "sick" },
+                      ],
+                      admin: { width: "30%" },
+                    },
+                    { name: "note", label: "Ghi chú", type: "text", admin: { width: "40%" } },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+
         // ── Trạng thái ────────────────────────────────────────
         {
           label: "Trạng thái",
           fields: [
+            {
+              type: "row",
+              fields: [
+                {
+                  name: "market",
+                  label: "Thị trường XKLĐ",
+                  type: "select",
+                  options: [
+                    { label: "🇯🇵 Nhật Bản", value: "jp" },
+                    { label: "🇰🇷 Hàn Quốc", value: "kr" },
+                    { label: "🇹🇼 Đài Loan", value: "tw" },
+                    { label: "🇩🇪 Đức", value: "de" },
+                    { label: "🇸🇦 Trung Đông", value: "me" },
+                    { label: "🇪🇺 EU khác", value: "eu" },
+                    { label: "Khác", value: "other" },
+                  ],
+                  admin: {
+                    width: "30%",
+                    description: "Filter nhanh không cần join OrderWorkers",
+                  },
+                },
+                {
+                  name: "agreedAt",
+                  label: "Đồng ý tham gia lúc",
+                  type: "date",
+                  admin: {
+                    width: "70%",
+                    date: { pickerAppearance: "dayAndTime" },
+                    description: "Auto-set khi status → 'agreed' (track SLA W1)",
+                    readOnly: true,
+                  },
+                },
+              ],
+            },
             {
               name: "status",
               label: "Trạng thái vòng đời",
@@ -489,20 +601,99 @@ export const Workers: CollectionConfig = {
               ],
             },
             {
-              name: "recruitedBy",
-              label: "Người tuyển",
-              type: "relationship",
-              relationTo: "users",
-              filterOptions: () => ({
-                role: { in: ["recruiter", "manager", "admin"] },
-              }),
+              type: "row",
+              fields: [
+                {
+                  name: "office",
+                  label: "Văn phòng phụ trách",
+                  type: "relationship",
+                  relationTo: "offices",
+                  filterOptions: () => ({ active: { equals: true } }),
+                  admin: {
+                    width: "50%",
+                    description:
+                      "Văn phòng TLG đang quản lý LĐ này. LĐ tự chọn trong form đăng ký, admin có thể đổi sau.",
+                  },
+                },
+                {
+                  name: "recruitedAt",
+                  label: "Ngày tiếp nhận",
+                  type: "date",
+                  defaultValue: () => new Date().toISOString(),
+                  admin: { width: "50%", date: { pickerAppearance: "dayOnly" } },
+                },
+              ],
             },
             {
-              name: "recruitedAt",
-              label: "Ngày tiếp nhận",
-              type: "date",
-              defaultValue: () => new Date().toISOString(),
-              admin: { date: { pickerAppearance: "dayOnly" } },
+              type: "row",
+              fields: [
+                {
+                  name: "recruitedBy",
+                  label: "Người tuyển",
+                  type: "relationship",
+                  relationTo: "users",
+                  filterOptions: () => ({
+                    role: { in: ["recruiter", "manager", "admin"] },
+                  }),
+                  admin: { width: "50%" },
+                },
+                {
+                  name: "createdByUser",
+                  label: "Người nhập dữ liệu",
+                  type: "relationship",
+                  relationTo: "users",
+                  admin: {
+                    width: "50%",
+                    readOnly: true,
+                    description:
+                      "Tự ghi nhận khi tạo (admin sửa hồ sơ sau không thay đổi). Dùng cho audit log.",
+                  },
+                },
+              ],
+            },
+            {
+              type: "row",
+              fields: [
+                {
+                  name: "depositAmount",
+                  label: "Tiền đặt cọc (VND)",
+                  type: "number",
+                  admin: {
+                    width: "33%",
+                    placeholder: "vd: 30000000",
+                    description: "Cọc ràng buộc LĐ đi học/đi XKLĐ. Hoàn lại khi xuất cảnh / khi trượt.",
+                  },
+                },
+                {
+                  name: "depositDate",
+                  label: "Ngày nộp cọc",
+                  type: "date",
+                  admin: {
+                    width: "33%",
+                    date: { pickerAppearance: "dayOnly" },
+                  },
+                },
+                {
+                  name: "depositRefundedAt",
+                  label: "Ngày hoàn cọc",
+                  type: "date",
+                  admin: {
+                    width: "34%",
+                    date: { pickerAppearance: "dayOnly" },
+                    description:
+                      "Hoàn cọc khi LĐ trượt / huỷ / xuất cảnh thành công. Để trống nếu chưa hoàn.",
+                  },
+                },
+              ],
+            },
+            {
+              name: "depositNote",
+              label: "Ghi chú đặt cọc",
+              type: "textarea",
+              admin: {
+                rows: 2,
+                description: "Vd: 'Nộp đợt 1 15tr ngày 10/05, đợt 2 15tr ngày 25/05'",
+              },
             },
             {
               name: "notes",

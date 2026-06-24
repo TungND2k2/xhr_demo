@@ -1,4 +1,5 @@
 import type { CollectionConfig } from "payload";
+import { accessRead, accessCreate, accessUpdate, accessDelete } from "../utilities/role-access";
 
 /**
  * Assets — quản lý tài sản công ty: laptop, xe, văn phòng phẩm, thiết bị
@@ -26,12 +27,10 @@ export const Assets: CollectionConfig = {
     ],
   },
   access: {
-    read: ({ req: { user } }) => !!user,
-    create: ({ req: { user } }) =>
-      ["admin", "manager", "accountant"].includes(user?.role ?? ""),
-    update: ({ req: { user } }) =>
-      ["admin", "manager", "accountant"].includes(user?.role ?? ""),
-    delete: ({ req: { user } }) => user?.role === "admin",
+    read: accessRead("assets"),
+    create: accessCreate("assets", ["admin", "manager", "accountant"]),
+    update: accessUpdate("assets", ["admin", "manager", "accountant"]),
+    delete: accessDelete("assets", ["admin"]),
   },
   fields: [
     {
@@ -114,21 +113,34 @@ export const Assets: CollectionConfig = {
       type: "row",
       fields: [
         {
+          name: "quantity",
+          label: "Số lượng",
+          type: "number",
+          defaultValue: 1,
+          min: 1,
+          admin: {
+            width: "25%",
+            description:
+              "Số đơn vị cùng loại được gom thành 1 record (vd 4 cái máy tính cây cùng phòng). Default 1.",
+          },
+        },
+        {
           name: "purchaseDate",
           label: "Ngày mua",
           type: "date",
           admin: {
             date: { pickerAppearance: "dayOnly" },
-            width: "33%",
+            width: "25%",
           },
         },
         {
           name: "purchaseValue",
-          label: "Giá trị (VND)",
+          label: "Đơn giá (VND)",
           type: "number",
           admin: {
-            width: "33%",
+            width: "25%",
             placeholder: "30000000",
+            description: "Đơn giá / 1 đơn vị",
           },
         },
         {
@@ -137,7 +149,7 @@ export const Assets: CollectionConfig = {
           type: "date",
           admin: {
             date: { pickerAppearance: "dayOnly" },
-            width: "34%",
+            width: "25%",
           },
         },
       ],
