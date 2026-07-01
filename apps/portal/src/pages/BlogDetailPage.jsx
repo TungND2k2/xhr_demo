@@ -134,7 +134,7 @@ export default function BlogDetailPage({ recordId, onBack }) {
         {/* Title — Medium-style massive serif */}
         <h1
           className="text-[42px] md:text-[52px] font-black text-[var(--text-main)] leading-[1.15] tracking-tight mb-4"
-          style={{ fontFamily: 'Georgia, "Times New Roman", serif' }}
+          style={{ fontFamily: 'Merriweather, "Source Serif Pro", "Charter", Georgia, serif' }}
         >
           {doc.title}
         </h1>
@@ -143,7 +143,7 @@ export default function BlogDetailPage({ recordId, onBack }) {
         {doc.excerpt && (
           <p
             className="text-xl md:text-2xl italic text-[var(--text-muted)] leading-relaxed mb-10"
-            style={{ fontFamily: 'Georgia, "Times New Roman", serif' }}
+            style={{ fontFamily: 'Merriweather, "Source Serif Pro", "Charter", Georgia, serif' }}
           >
             {doc.excerpt}
           </p>
@@ -175,7 +175,7 @@ export default function BlogDetailPage({ recordId, onBack }) {
           {hasContent ? (
             <BlockNoteView editor={editor} theme={isDark ? 'dark' : 'light'} editable={false} />
           ) : (
-            <p className="text-slate-500 italic text-lg" style={{ fontFamily: 'Georgia, serif' }}>
+            <p className="text-slate-500 italic text-lg" style={{ fontFamily: 'Merriweather, Georgia, serif' }}>
               Bài viết này chưa có nội dung.
             </p>
           )}
@@ -219,7 +219,7 @@ export default function BlogDetailPage({ recordId, onBack }) {
           background: transparent !important;
         }
         .bn-blog-view .bn-block-content {
-          font-family: Georgia, "Times New Roman", serif;
+          font-family: Merriweather, "Source Serif Pro", "Charter", Georgia, serif;
           font-size: 20px;
           line-height: 1.75;
           color: var(--text-main);

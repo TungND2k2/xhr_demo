@@ -265,7 +265,7 @@ export default function BlogEditorPage({ mode = 'create' }) {
             rows={1}
             autoFocus={mode === 'create'}
             className="block w-full bg-transparent text-[42px] md:text-[52px] font-black text-[var(--text-main)] outline-none resize-none mb-3 tracking-tight leading-[1.15] placeholder:text-slate-400"
-            style={{ fontFamily: 'Georgia, "Times New Roman", serif' }}
+            style={{ fontFamily: 'Merriweather, "Source Serif Pro", "Charter", Georgia, serif' }}
           />
 
           {/* Excerpt / subtitle */}
@@ -276,7 +276,7 @@ export default function BlogEditorPage({ mode = 'create' }) {
             placeholder="Tóm tắt ngắn (tuỳ chọn)"
             rows={1}
             className="block w-full bg-transparent text-xl md:text-2xl italic text-[var(--text-muted)] outline-none resize-none mb-10 placeholder:text-slate-400 leading-relaxed"
-            style={{ fontFamily: 'Georgia, "Times New Roman", serif' }}
+            style={{ fontFamily: 'Merriweather, "Source Serif Pro", "Charter", Georgia, serif' }}
           />
 
           {/* BlockNote editor */}
@@ -320,7 +320,7 @@ export default function BlogEditorPage({ mode = 'create' }) {
           background: transparent !important;
         }
         .bn-blog-editor .bn-block-content {
-          font-family: Georgia, "Times New Roman", serif;
+          font-family: Merriweather, "Source Serif Pro", "Charter", Georgia, serif;
           font-size: 19px;
           line-height: 1.7;
         }
@@ -368,7 +368,7 @@ function PublishDialog({ title, excerpt, department, setDepartment, tags, setTag
             )}
             <div className="p-4">
               <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">{DEPT_LABEL[department]}</p>
-              <h3 className="text-base font-black text-[var(--text-main)] mb-1 line-clamp-2" style={{ fontFamily: 'Georgia, serif' }}>{title || 'Tiêu đề bài viết'}</h3>
+              <h3 className="text-base font-black text-[var(--text-main)] mb-1 line-clamp-2" style={{ fontFamily: 'Merriweather, Georgia, serif' }}>{title || 'Tiêu đề bài viết'}</h3>
               <p className="text-xs text-slate-500 line-clamp-2">{excerpt || 'Tóm tắt bài viết'}</p>
             </div>
           </div>
