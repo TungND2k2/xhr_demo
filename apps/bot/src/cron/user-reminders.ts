@@ -12,6 +12,7 @@
  */
 import { payload, PayloadError } from "../payload/client.js";
 import { logger } from "../utils/logger.js";
+import { sendEmail } from "../utils/email-sender.js";
 import type { TelegramChannel } from "../telegram/channel.js";
 
 interface UserDoc {
@@ -33,6 +34,7 @@ interface ReminderDoc {
   recipientRole?: string;
   recipientTelegramUserId?: string;
   mentionTelegramUserIds?: Array<{ telegramUserId: string }>;
+  emailRecipients?: Array<{ email: string; note?: string }>;
   status: "pending" | "sent" | "dismissed";
   snoozeUntil?: string;
   relatedOrder?: string | { id: string; orderCode?: string };
@@ -51,6 +53,27 @@ interface TelegramUserRow {
 interface PayloadFindResponse<T> {
   docs: T[];
   totalDocs: number;
+}
+
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function fmtRelatedHtml(rem: ReminderDoc): string {
+  const bits: string[] = [];
+  if (rem.relatedOrder) {
+    const code = typeof rem.relatedOrder === "string" ? rem.relatedOrder : rem.relatedOrder.orderCode ?? rem.relatedOrder.id;
+    bits.push(`<li>📦 Đơn liên quan: ${escapeHtml(code)}</li>`);
+  }
+  if (rem.relatedWorker) {
+    const code = typeof rem.relatedWorker === "string" ? rem.relatedWorker : rem.relatedWorker.workerCode ?? rem.relatedWorker.id;
+    bits.push(`<li>👤 LĐ liên quan: ${escapeHtml(code)}</li>`);
+  }
+  return bits.length > 0 ? `<ul>${bits.join("")}</ul>` : "";
 }
 
 function fmtRelated(rem: ReminderDoc): string {
@@ -250,6 +273,39 @@ export async function runUserReminders({
             "UserReminder",
             `send to ${t.label} (chat ${t.chatId}) failed: ${err}`,
           );
+        }
+      }
+
+      // Gửi email cho recipients trong rem.emailRecipients (nếu có).
+      const emails = (rem.emailRecipients ?? [])
+        .map((r) => r.email?.trim())
+        .filter((e): e is string => !!e);
+      if (emails.length > 0) {
+        const dueAtVn = new Date(rem.dueAt).toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" });
+        const html = `
+          <h2>🔔 ${escapeHtml(rem.title)}</h2>
+          <p><strong>Tới hạn:</strong> ${escapeHtml(dueAtVn)} (giờ VN)</p>
+          ${rem.description ? `<p>${escapeHtml(rem.description).replace(/\n/g, "<br>")}</p>` : ""}
+          ${fmtRelatedHtml(rem)}
+          <hr/>
+          <p style="color:#888;font-size:12px;">Email tự động từ xHR Bot. Reminder #${rem.id}.</p>
+        `;
+        try {
+          const r = await sendEmail({
+            to: emails,
+            subject: `[xHR Reminder] ${rem.title}`,
+            htmlBody: html,
+          });
+          if (r.ok) {
+            logger.info("UserReminder", `→ email sent to ${emails.join(",")} (id=${r.messageId})`);
+          } else {
+            logger.warn(
+              "UserReminder",
+              `email fail (${r.error})${r.blockedRecipients ? ` blocked=${r.blockedRecipients.join(",")}` : ""}`,
+            );
+          }
+        } catch (err) {
+          logger.warn("UserReminder", `email send threw: ${err}`);
         }
       }
 

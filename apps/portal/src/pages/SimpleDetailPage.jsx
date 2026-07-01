@@ -7,14 +7,6 @@ import DeleteButton from '../components/DeleteButton';
 
 /**
  * SimpleDetailPage — generic detail view cho 1 record bất kỳ.
- *
- * Section schema:
- *  { title, icon?, wide?, fields: [[label, value, opts?], ...] }
- *  - wide=true : section span cả 2 column
- *  - opts.mono : render value mono-font
- *  - opts.pre  : value là multiline → render <pre> preserve formatting
- *
- * config.headerSummary(doc): trả về { title, subtitle, badges:[{label, color}] }
  */
 export default function SimpleDetailPage({
   title,
@@ -44,11 +36,10 @@ export default function SimpleDetailPage({
     ? detailSections(doc)
     : autoSections(doc);
 
-  // Ẩn field rỗng + ẩn section nếu toàn rỗng (trừ khi có custom render)
   const isEmpty = (v) => v === null || v === undefined || v === '' || v === '—';
   const sections = rawSections
     .map((sec) => {
-      if (sec.render) return sec; // custom render — không filter
+      if (sec.render) return sec;
       const filtered = (sec.fields ?? []).filter(([, value]) => !isEmpty(value));
       return { ...sec, fields: filtered };
     })
@@ -58,15 +49,19 @@ export default function SimpleDetailPage({
     ? headerSummary(doc)
     : { title: defaultHeader(doc, displayKey), subtitle: null, badges: [] };
 
+  const narrowSections = sections.filter((s) => !s.wide);
+  const wideSections = sections.filter((s) => s.wide);
+
   return (
-    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-6 print-area">
+    <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }} className="space-y-6 print-area">
+      {/* Top action bar */}
       <div className="flex items-center justify-between no-print">
-        <button onClick={onBack} className="flex items-center gap-2 text-sm text-slate-500 hover:text-[var(--text-main)] transition-colors">
-          <ArrowLeft size={16} /> Quay lại {title}
+        <button onClick={onBack} className="flex items-center gap-2 text-xs font-bold text-slate-400 hover:text-[var(--text-main)] transition-colors group">
+          <ArrowLeft size={16} className="group-hover:-translate-x-0.5 transition-transform" /> QUAY LẠI
         </button>
         <div className="flex items-center gap-2">
-          <button onClick={printPdf} className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-xl border border-[var(--border-color)] hover:border-blue-500/40 hover:bg-blue-500/5 transition-all">
-            <Printer size={14} /> Xuất PDF
+          <button onClick={printPdf} className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold rounded-xl border border-[var(--border-color)] hover:border-red-500/30 hover:bg-red-500/5 text-slate-600 dark:text-slate-300 hover:text-red-500 dark:hover:text-red-400 transition-all shadow-sm">
+            <Printer size={14} className="text-red-500" /> Xuất PDF
           </button>
           <DeleteButton
             collection={collection}
@@ -77,76 +72,105 @@ export default function SimpleDetailPage({
         </div>
       </div>
 
-      {/* Header */}
-      <div className="glass-card p-6">
-        <div className="flex items-start justify-between gap-4 flex-wrap">
-          <div className="min-w-0 flex-1">
-            <h2 className="text-3xl font-black text-[var(--text-main)] tracking-tight break-words">{summary.title}</h2>
-            {summary.subtitle && (
-              <p className="text-sm text-[var(--text-muted)] mt-1">{summary.subtitle}</p>
-            )}
-            <p className="text-[10px] text-slate-500 mt-2 font-mono">{collection}/{doc.id}</p>
+      {/* Hero header */}
+      <div className="glass-card p-8 shadow-sm hover:shadow-md transition-shadow duration-300">
+        <div className="flex items-start gap-6 flex-wrap">
+          <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-600 via-indigo-500 to-cyan-400 flex items-center justify-center text-white text-2xl font-black shadow-lg shadow-blue-500/30 shrink-0 select-none relative overflow-hidden">
+            <div className="absolute inset-0 bg-white/10 transform -skew-x-12 translate-x-1/2" />
+            <span className="relative z-10">{(summary.title ?? '?').slice(0, 1).toUpperCase()}</span>
           </div>
-          {summary.badges && summary.badges.length > 0 && (
-            <div className="flex flex-wrap gap-2">
-              {summary.badges.map((b, i) => (
-                <span key={i} className={`px-3 py-1.5 rounded-xl text-[10px] font-bold uppercase tracking-wider ${badgeClass(b.color)}`}>
-                  {b.label}
-                </span>
-              ))}
+          <div className="flex-1 min-w-0">
+            <div className="flex items-start justify-between gap-4 flex-wrap">
+              <div>
+                <h2 className="text-3xl font-black text-[var(--text-main)] tracking-tight break-words">{summary.title}</h2>
+                {summary.subtitle && (
+                  <p className="text-sm text-[var(--text-muted)] font-medium mt-1">{summary.subtitle}</p>
+                )}
+                <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-2 font-mono uppercase tracking-widest">{collection} · {doc.id?.slice(-8)}</p>
+              </div>
+              {summary.badges && summary.badges.length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                  {summary.badges.map((b, i) => (
+                    <span key={i} className={badgeClass(b.color)}>{b.label}</span>
+                  ))}
+                </div>
+              )}
             </div>
-          )}
+          </div>
         </div>
       </div>
 
-      {/* Sections grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {sections.map((sec, idx) => (
-          <div key={idx} className={`glass-card p-6 ${sec.wide ? 'lg:col-span-2' : ''}`}>
-            <h3 className="text-xs font-bold uppercase tracking-widest text-slate-500 mb-4 flex items-center gap-2">
-              {sec.icon && <sec.icon size={14} className="text-blue-500" />}
-              {sec.title}
-            </h3>
-            {sec.render ? (
-              sec.render()
-            ) : (
-              <div className="space-y-2.5">
-                {sec.fields.map(([label, value, opts], i) => {
-                  const empty = value === null || value === undefined || value === '';
-                  const isPre = opts?.pre;
-                  return (
-                    <div key={i} className={`${isPre ? 'flex flex-col gap-1.5' : 'flex justify-between gap-3'} text-sm border-b border-[var(--border-color)] pb-2 last:border-0 last:pb-0`}>
-                      <span className="text-slate-500 shrink-0">{label}</span>
-                      {isPre ? (
-                        <pre className="font-sans whitespace-pre-wrap text-[13px] text-[var(--text-main)] leading-relaxed bg-black/[0.02] dark:bg-white/[0.02] rounded-lg p-3 m-0">
-                          {empty ? '—' : value}
-                        </pre>
-                      ) : (
-                        <span className={`font-medium text-right break-words max-w-[60%] ${opts?.mono ? 'font-mono text-xs' : ''} text-[var(--text-main)]`}>
-                          {empty ? '—' : value}
-                        </span>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        ))}
-      </div>
+      {/* 2-column narrow sections */}
+      {narrowSections.length > 0 && (
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+          {narrowSections.map((sec, idx) => (
+            <SectionCard key={idx} sec={sec} />
+          ))}
+        </div>
+      )}
+
+      {/* Full-width wide sections */}
+      {wideSections.length > 0 && (
+        <div className="space-y-6">
+          {wideSections.map((sec, idx) => (
+            <SectionCard key={idx} sec={sec} wide />
+          ))}
+        </div>
+      )}
     </motion.div>
+  );
+}
+
+function SectionCard({ sec, wide }) {
+  return (
+    <div className="glass-card overflow-hidden shadow-sm hover:shadow-md transition-shadow duration-300">
+      <div className="px-6 py-3.5 border-b border-[var(--border-color)] bg-gradient-to-r from-blue-500/[0.04] to-transparent flex items-center gap-2">
+        {sec.icon && <sec.icon size={14} className="text-blue-500" />}
+        <h3 className="text-[10px] font-extrabold uppercase tracking-widest text-blue-600 dark:text-blue-400">{sec.title}</h3>
+      </div>
+      <div className="p-6">
+        {sec.render ? (
+          sec.render()
+        ) : (
+          <div className={wide ? 'grid grid-cols-1 md:grid-cols-2 gap-x-10 gap-y-1' : 'space-y-0'}>
+            {sec.fields.map(([label, value, opts], i) => {
+              const empty = value === null || value === undefined || value === '';
+              const isPre = opts?.pre;
+              if (isPre) {
+                return (
+                  <div key={i} className="md:col-span-2 space-y-1.5 py-3">
+                    <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 dark:text-slate-500">{label}</span>
+                    <pre className="font-sans whitespace-pre-wrap text-[11px] font-semibold text-[var(--text-main)] leading-relaxed bg-black/[0.015] dark:bg-white/[0.015] rounded-xl p-4 m-0 border border-[var(--border-color)]">
+                      {empty ? '—' : value}
+                    </pre>
+                  </div>
+                );
+              }
+              return (
+                <div key={i} className="flex items-center justify-between gap-3 py-3 border-b border-[var(--border-color)] last:border-0">
+                  <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 dark:text-slate-500 shrink-0">{label}</span>
+                  <span className={`text-xs font-bold text-right break-words max-w-[60%] ${opts?.mono ? 'font-mono text-[10px] text-blue-500' : 'text-[var(--text-main)]'}`}>
+                    {empty ? <span className="text-slate-300 dark:text-slate-600">—</span> : value}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
 
 function badgeClass(color) {
   switch (color) {
-    case 'green': return 'bg-green-500/10 text-green-600 dark:text-green-400';
-    case 'amber': return 'bg-amber-500/10 text-amber-600 dark:text-amber-400';
-    case 'red':   return 'bg-red-500/10 text-red-600 dark:text-red-400';
-    case 'cyan':  return 'bg-cyan-500/10 text-cyan-600 dark:text-cyan-400';
-    case 'purple':return 'bg-purple-500/10 text-purple-600 dark:text-purple-400';
-    case 'blue':  return 'bg-blue-500/10 text-blue-600 dark:text-blue-400';
-    default:      return 'bg-slate-500/10 text-slate-500 dark:text-slate-400';
+    case 'green': return 'badge-green';
+    case 'amber': return 'badge-amber';
+    case 'red':   return 'badge-red';
+    case 'cyan':  return 'badge-cyan';
+    case 'purple':return 'badge-purple';
+    case 'blue':  return 'badge-blue';
+    default:      return 'badge-slate';
   }
 }
 

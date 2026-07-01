@@ -15,6 +15,22 @@ const ConfigSchema = z.object({
   // MarkItDown — file → markdown
   MARKITDOWN_URL: z.string().url().default("http://localhost:8080"),
 
+  // Qdrant — vector search (Docker)
+  QDRANT_URL: z.string().url().default("http://localhost:6333"),
+
+  // Public URL của Payload CMS admin (cho FormInvite share, /admin link)
+  PUBLIC_URL: z.string().url().default("https://xhr.cms-admin.x-or.cloud"),
+
+  // Public URL của xHR Portal (cho khách hàng / nhân viên xem chi tiết).
+  // Bot dùng link này khi handoff hoặc khi trả về "Xem hồ sơ".
+  // Default = trỏ về VM LAN; khi gắn domain → update env.
+  PORTAL_URL: z.string().url().default("https://x-hr.portal.x-or.cloud"),
+
+  // Telegram Bot API base — mặc định cloud (limit 20MB upload).
+  // Set sang "http://localhost:8081" để dùng self-hosted Telegram Bot API
+  // Local Server (cho phép upload >20MB, tối đa 2GB).
+  TELEGRAM_API_BASE: z.string().url().default("https://api.telegram.org"),
+
   // Bot HTTP server (Payload hooks gọi vào)
   BOT_HTTP_PORT: z.coerce.number().default(4002),
   INTERNAL_SECRET: z.string().min(8).default("change-me-internal-secret"),

@@ -47,8 +47,6 @@ flowchart TD
 
 ---
 
-## 2. Tại sao chia thành nhiều agent?
-
 | Vấn đề khi dùng 1 agent | Khi dùng multi-agent |
 |---|---|
 | 1 bot phải "nhớ" toàn bộ quy trình XKLĐ → dễ nhầm | Mỗi agent chỉ nhớ 1 mảng → trả lời chính xác hơn |

@@ -83,6 +83,16 @@ const TOOL_NAME_ALIASES: Record<string, string> = {
   get_workflow_stages: "get_workflow-stages",
   create_workflow_stages: "create_workflow-stages",
   update_workflow_stages: "update_workflow-stages",
+  list_supply_contracts: "list_supply-contracts",
+  get_supply_contracts: "get_supply-contracts",
+  create_supply_contracts: "create_supply-contracts",
+  update_supply_contracts: "update_supply-contracts",
+  delete_supply_contracts: "delete_supply-contracts",
+  list_official_documents: "list_official-documents",
+  get_official_documents: "get_official-documents",
+  create_official_documents: "create_official-documents",
+  update_official_documents: "update_official-documents",
+  delete_official_documents: "delete_official-documents",
 };
 
 function resolveToolName(name: string): string {

@@ -39,6 +39,24 @@ export interface CrudOptions<TInput extends z.ZodRawShape> {
   filterableFields?: string[];
   /** Disable verbs you don't want exposed to the AI (default: none disabled). */
   exclude?: CrudVerb[];
+  /**
+   * Extra field names to include in list output (in addition to titleField).
+   * Each field rendered as `  fieldKey=value` line. Nested fields via dot
+   * (vd "partner.name", "tlgRep.name"). Skip if value is null/empty.
+   * → AI có đủ info trong 1 list call, không cần loop get_*.
+   */
+  listFields?: string[];
+  /**
+   * Populate depth for list/get response (default 0 = raw IDs only).
+   * Set 1 nếu listFields có nested (vd "partner.name").
+   */
+  listDepth?: number;
+  /**
+   * Fields to search across when AI passes `q` filter. Tạo 1 OR query
+   * `field1 contains q OR field2 contains q OR ...`. Hữu ích cho tool
+   * lookup nhanh (vd find employee by name OR phone OR code).
+   */
+  qSearchFields?: string[];
 }
 
 function ok(text: string): CallToolResult {
@@ -49,17 +67,56 @@ function err(message: string): CallToolResult {
   return { content: [{ type: "text" as const, text: `⚠️ ${message}` }], isError: true };
 }
 
+/** Auto-cast string "true"/"false" → boolean cho boolean-ish fields. */
+function smartCast(field: string, v: unknown): unknown {
+  if (typeof v !== "string") return v;
+  // Field tên dạng "active", "isXxx", "hasXxx" thường là boolean
+  if (/^(active|is[A-Z]|has[A-Z])/.test(field) || field === "active") {
+    if (v === "true") return true;
+    if (v === "false") return false;
+  }
+  return v;
+}
+
 function buildWhere(
   filters: Record<string, unknown>,
   fields: string[],
 ): Where {
   const where: Where = {};
   for (const f of fields) {
-    const v = filters[f];
-    if (v === undefined || v === null || v === "") continue;
+    const raw = filters[f];
+    if (raw === undefined || raw === null || raw === "") continue;
+    const v = smartCast(f, raw);
+    // String → contains (fuzzy); other (boolean/number) → equals
     where[f] = typeof v === "string" ? { contains: v } : { equals: v };
   }
   return where;
+}
+
+/** Lấy nested value qua dot path (vd "partner.name", "tlgRep.name"). */
+function getNested(obj: unknown, path: string): unknown {
+  return path.split(".").reduce<unknown>((acc, key) => {
+    if (acc && typeof acc === "object" && key in (acc as Record<string, unknown>)) {
+      return (acc as Record<string, unknown>)[key];
+    }
+    return undefined;
+  }, obj);
+}
+
+function fmtValue(v: unknown): string {
+  if (v == null) return "";
+  if (typeof v === "string") return v.slice(0, 200);
+  if (typeof v === "number" || typeof v === "boolean") return String(v);
+  if (v instanceof Date) return v.toISOString().slice(0, 10);
+  if (typeof v === "object") {
+    // Date stored as ISO string in Mongo
+    if ("id" in (v as Record<string, unknown>)) {
+      const o = v as Record<string, unknown>;
+      return `${o.name ?? o.title ?? o.id} (#${o.id})`;
+    }
+    return JSON.stringify(v).slice(0, 200);
+  }
+  return String(v);
 }
 
 export function createCrudTools<T extends z.ZodRawShape>(opts: CrudOptions<T>): AnyTool[] {
@@ -70,7 +127,21 @@ export function createCrudTools<T extends z.ZodRawShape>(opts: CrudOptions<T>): 
     titleField = "id",
     filterableFields = [],
     exclude = [],
+    listFields = [],
+    listDepth = 0,
+    qSearchFields = [],
   } = opts;
+
+  // Builder cho 1 dòng list output — có thêm các field meta nếu cấu hình.
+  function fmtListItem(doc: Record<string, unknown>): string {
+    const title = String(getNested(doc, titleField) ?? doc.id);
+    const lines = [`#${doc.id} ${title}`];
+    for (const fp of listFields) {
+      const v = fmtValue(getNested(doc, fp));
+      if (v) lines.push(`  ${fp}=${v}`);
+    }
+    return lines.join("\n");
+  }
 
   // Internal collection is loose-typed because each tool() call yields a
   // shape-specific generic the MCP server's array signature can't accept
@@ -80,30 +151,55 @@ export function createCrudTools<T extends z.ZodRawShape>(opts: CrudOptions<T>): 
   // ── list ──────────────────────────────────────────────────────
   if (!exclude.includes("list")) {
     const listShape: z.ZodRawShape = {
-      limit: z.number().int().positive().max(100).default(20).describe("Số bản ghi tối đa"),
+      limit: z.number().int().positive().max(500).default(50).describe("Số bản ghi tối đa (max 500)"),
     };
     for (const f of filterableFields) {
       listShape[f] = z.string().optional().describe(`Lọc theo ${f}`);
     }
+    if (qSearchFields.length > 0) {
+      listShape.q = z.string().optional().describe(
+        `Search fuzzy trên nhiều field (${qSearchFields.join(", ")}). Ưu tiên dùng khi không biết match field nào.`,
+      );
+    }
+
+    const listDescBase = `Liệt kê ${label.plural}. Dùng khi user hỏi "có những ${label.plural} nào", "danh sách ${label.plural}", hoặc cần xem nhiều bản ghi cùng lúc.`;
+    const listDesc = listFields.length > 0
+      ? `${listDescBase}\n\n⚠ Tool này trả KÈM các field: ${listFields.join(", ")}. KHÔNG cần gọi get_${slug} cho từng record — 1 list call đủ data.`
+      : listDescBase;
 
     tools.push(
       tool(
         `list_${slug}`,
-        `Liệt kê ${label.plural}. Dùng khi user hỏi "có những ${label.plural} nào", "danh sách ${label.plural}", hoặc cần xem nhiều bản ghi cùng lúc.`,
+        listDesc,
         listShape,
         async (args) => {
           try {
-            const { limit, ...filters } = args as Record<string, unknown>;
+            const { limit, q, ...filters } = args as Record<string, unknown>;
             const where = buildWhere(filters, filterableFields);
+            // Apply q (fuzzy multi-field search) — OR across qSearchFields
+            if (q && typeof q === "string" && qSearchFields.length > 0) {
+              const qConditions = qSearchFields.map((f) => ({ [f]: { contains: q } }));
+              const existing = Object.keys(where).length > 0 ? [{ and: [where] }] : [];
+              (where as Record<string, unknown>).or = qConditions;
+              if (existing.length > 0) {
+                // wrap into and: [filter, or: qConditions]
+                delete (where as Record<string, unknown>).or;
+                (where as Record<string, unknown>).and = [...existing.flatMap((x) => x.and), { or: qConditions }];
+              }
+            }
             const res = await payload.request<PayloadFindResponse>(`/api/${slug}`, {
               query: {
                 where: Object.keys(where).length > 0 ? where : undefined,
                 limit: Number(limit) || 20,
+                depth: listDepth,
               },
             });
+            const fmt = listFields.length > 0
+              ? res.docs.map(fmtListItem).join("\n\n")
+              : formatList(res.docs, titleField);
             return ok(
               `Tìm thấy ${res.totalDocs} ${label.plural}` +
-                (res.docs.length === 0 ? "" : `:\n${formatList(res.docs, titleField)}`),
+                (res.docs.length === 0 ? "" : `:\n${fmt}`),
             );
           } catch (e) {
             return err(e instanceof PayloadError ? e.message : String(e));

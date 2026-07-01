@@ -21,35 +21,84 @@ import { z } from "zod";
 
 import { getConfig } from "../config.js";
 import { logger } from "../utils/logger.js";
+import { payload } from "../payload/client.js";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyTool = ReturnType<typeof tool<any>>;
 
-let transporter: Transporter | null = null;
-
-function getTransporter(): Transporter | null {
-  if (transporter) return transporter;
-  const cfg = getConfig();
-  if (!cfg.SMTP_HOST || !cfg.SMTP_USER || !cfg.SMTP_PASS) {
-    return null;
-  }
-  transporter = nodemailer.createTransport({
-    host: cfg.SMTP_HOST,
-    port: cfg.SMTP_PORT,
-    secure: cfg.SMTP_PORT === 465,
-    auth: { user: cfg.SMTP_USER, pass: cfg.SMTP_PASS },
-  });
-  return transporter;
+interface EmailSettings {
+  enabled?: boolean;
+  host?: string;
+  port?: number;
+  secure?: boolean;
+  user?: string;
+  pass?: string;
+  from?: string;
+  allowedRecipients?: Array<{ email: string; note?: string }>;
 }
 
-function getAllowedRecipients(): Set<string> | null {
-  const cfg = getConfig();
-  if (!cfg.EMAIL_ALLOWED_RECIPIENTS) return null;
-  return new Set(
-    cfg.EMAIL_ALLOWED_RECIPIENTS.split(",")
-      .map((e) => e.trim().toLowerCase())
-      .filter(Boolean),
-  );
+let cachedSettings: { data: EmailSettings; expiresAt: number } | null = null;
+const SETTINGS_TTL_MS = 60_000; // refresh mỗi 60s
+
+async function loadSettings(): Promise<EmailSettings> {
+  if (cachedSettings && cachedSettings.expiresAt > Date.now()) {
+    return cachedSettings.data;
+  }
+  try {
+    const data = await payload.request<EmailSettings>(`/api/globals/email-settings`);
+    cachedSettings = { data, expiresAt: Date.now() + SETTINGS_TTL_MS };
+    return data;
+  } catch (e) {
+    logger.warn("Email", `load EmailSettings global fail (sẽ fallback env): ${e}`);
+    return {};
+  }
+}
+
+/** Resolve config: portal Global ưu tiên, env làm fallback. */
+async function resolveConfig(): Promise<{
+  host?: string;
+  port?: number;
+  secure?: boolean;
+  user?: string;
+  pass?: string;
+  from?: string;
+  enabled: boolean;
+  whitelist: Set<string> | null;
+}> {
+  const env = getConfig();
+  const g = await loadSettings();
+  // Whitelist: ưu tiên portal array; fallback env (comma-separated)
+  let whitelist: Set<string> | null = null;
+  if (g.allowedRecipients && g.allowedRecipients.length > 0) {
+    whitelist = new Set(g.allowedRecipients.map((r) => r.email.trim().toLowerCase()).filter(Boolean));
+  } else if (env.EMAIL_ALLOWED_RECIPIENTS) {
+    whitelist = new Set(
+      env.EMAIL_ALLOWED_RECIPIENTS.split(",").map((e) => e.trim().toLowerCase()).filter(Boolean),
+    );
+  }
+  return {
+    host: g.host ?? env.SMTP_HOST,
+    port: g.port ?? env.SMTP_PORT,
+    secure: g.secure ?? (env.SMTP_PORT === 465),
+    user: g.user ?? env.SMTP_USER,
+    pass: g.pass ?? env.SMTP_PASS,
+    from: g.from ?? env.SMTP_FROM,
+    enabled: g.enabled !== false, // default ON if portal not set
+    whitelist,
+  };
+}
+
+async function getTransporter(): Promise<{ tx: Transporter; from: string; whitelist: Set<string> | null; enabled: boolean } | null> {
+  const c = await resolveConfig();
+  if (!c.enabled) return null;
+  if (!c.host || !c.user || !c.pass) return null;
+  const tx = nodemailer.createTransport({
+    host: c.host,
+    port: c.port ?? 587,
+    secure: !!c.secure,
+    auth: { user: c.user, pass: c.pass },
+  });
+  return { tx, from: c.from ?? c.user, whitelist: c.whitelist, enabled: c.enabled };
 }
 
 function isRecipientAllowed(addr: string, whitelist: Set<string> | null): boolean {
@@ -95,30 +144,30 @@ Format body: hỗ trợ HTML đầy đủ. Dùng <h2>/<table>/<ul> cho báo cáo
       ),
   },
   async (args) => {
-    const cfg = getConfig();
-    const tx = getTransporter();
-    if (!tx) {
+    const conf = await getTransporter();
+    if (!conf) {
       return err(
-        "SMTP chưa cấu hình (SMTP_HOST/USER/PASS env trống). Email tool tạm thời disabled.",
+        "SMTP chưa cấu hình hoặc đã tắt. Admin vào /admin/globals/email-settings để bật + điền config.",
       );
     }
+    const { tx, from, whitelist } = conf;
 
     // Whitelist check
-    const whitelist = getAllowedRecipients();
     const allRecipients = [
       ...args.to,
       ...(args.cc ?? []),
       ...(args.bcc ?? []),
     ];
-    const blocked = allRecipients.filter((e) => !isRecipientAllowed(e, whitelist));
-    if (blocked.length > 0) {
-      return err(
-        `Các email sau KHÔNG có trong whitelist: ${blocked.join(", ")}. ` +
-          `Admin cần thêm vào EMAIL_ALLOWED_RECIPIENTS để gửi.`,
-      );
+    if (whitelist) {
+      const blocked = allRecipients.filter((e) => !whitelist.has(e.trim().toLowerCase()));
+      if (blocked.length > 0) {
+        return err(
+          `Các email sau KHÔNG có trong whitelist: ${blocked.join(", ")}. ` +
+            `Admin vào /admin/globals/email-settings → "Whitelist địa chỉ nhận" để thêm.`,
+        );
+      }
     }
 
-    const from = cfg.SMTP_FROM ?? cfg.SMTP_USER ?? "bot@xhr.local";
     const plainText =
       args.plainTextBody ??
       args.htmlBody

@@ -43,9 +43,9 @@ function mediaLink(m) {
   const id = typeof m === 'object' ? m.id : m;
   const filename = typeof m === 'object' ? (m.filename ?? m.alt ?? `media#${id}`) : `media#${id}`;
   return (
-    <Link to={`/media/${id}`} className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-blue-500/5 group transition-colors">
-      <Paperclip size={14} className="text-blue-500 shrink-0" />
-      <span className="text-xs text-[var(--text-main)] truncate group-hover:underline">{filename}</span>
+    <Link to={`/media/${id}`} className="flex items-center gap-2 px-3 py-2 rounded-xl bg-black/5 dark:bg-white/5 hover:bg-blue-500/10 border border-[var(--border-color)] hover:border-blue-500/20 group transition-all duration-200 shadow-sm mt-1.5 w-full">
+      <Paperclip size={14} className="text-blue-500 shrink-0 group-hover:scale-110 transition-transform" />
+      <span className="text-xs font-semibold text-[var(--text-main)] truncate group-hover:text-blue-600 dark:group-hover:text-blue-400">{filename}</span>
     </Link>
   );
 }
@@ -130,16 +130,16 @@ export default function OfficialDocumentView({ recordId, onBack }) {
   return (
     <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-5">
       <div className="flex items-center justify-between no-print">
-        <button onClick={onBack} className="flex items-center gap-2 text-sm text-slate-500 hover:text-[var(--text-main)]">
-          <ArrowLeft size={16} /> Quay lại Công văn
+        <button onClick={onBack} className="flex items-center gap-2 text-xs font-bold text-slate-400 hover:text-[var(--text-main)] transition-colors">
+          <ArrowLeft size={16} /> QUAY LẠI
         </button>
         <div className="flex gap-2">
           {!editMode ? (
             <>
-              <button onClick={printPdf} className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-xl border border-[var(--border-color)] hover:border-blue-500/40 hover:bg-blue-500/5">
-                <Printer size={14} /> In / PDF
+              <button onClick={printPdf} className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold rounded-xl border border-[var(--border-color)] hover:border-red-500/30 hover:bg-red-500/5 text-slate-600 dark:text-slate-300 hover:text-red-500 dark:hover:text-red-400 transition-all shadow-sm">
+                <Printer size={14} className="text-red-500" /> In / PDF
               </button>
-              <button onClick={() => setEditMode(true)} className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-xl border border-blue-500/40 text-blue-500 hover:bg-blue-500/10">
+              <button onClick={() => setEditMode(true)} className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold rounded-xl border border-blue-500/40 text-blue-500 hover:bg-blue-500/10 transition-all shadow-sm">
                 <Edit2 size={14} /> Sửa
               </button>
               <DeleteButton
@@ -151,8 +151,8 @@ export default function OfficialDocumentView({ recordId, onBack }) {
             </>
           ) : (
             <>
-              <button onClick={() => { setDirty({}); setEditMode(false); }} disabled={saving} className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-xl border border-[var(--border-color)] hover:bg-black/5"><X size={14} /> Huỷ</button>
-              <button onClick={handleSave} disabled={saving} className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-xl border border-green-500/40 text-green-600 hover:bg-green-500/10 disabled:opacity-40">
+              <button onClick={() => { setDirty({}); setEditMode(false); }} disabled={saving} className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold rounded-xl border border-[var(--border-color)] hover:bg-black/5"><X size={14} /> Huỷ</button>
+              <button onClick={handleSave} disabled={saving} className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold rounded-xl border border-green-500/40 text-green-600 hover:bg-green-500/10 disabled:opacity-40">
                 <Save size={14} /> {saving ? 'Đang lưu...' : 'Lưu'}
               </button>
             </>
@@ -214,18 +214,76 @@ export default function OfficialDocumentView({ recordId, onBack }) {
                 )}
               </div>
             </div>
+
+            {/* Extra meta row — Số đến, ngày nhận, người ký, số bản */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4 pt-4 border-t border-[var(--border-color)]">
+              {d.direction === 'incoming' && (
+                <div>
+                  <div className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Số đến</div>
+                  {editMode ? (
+                    <input type="number" min={1} value={d.incomingSequence ?? ''} onChange={(e) => setDirty((x) => ({ ...x, incomingSequence: e.target.value ? Number(e.target.value) : null }))} className="w-full text-sm bg-yellow-50 border border-yellow-300 rounded-lg px-3 py-1.5" placeholder="VD: 7" />
+                  ) : (
+                    <div className="text-sm font-black text-blue-600 dark:text-blue-400 font-mono">
+                      {d.incomingSequence ? `${String(d.incomingSequence).padStart(3,'0')}/${d.issuedDate ? new Date(d.issuedDate).getFullYear() : new Date().getFullYear()}` : '—'}
+                    </div>
+                  )}
+                </div>
+              )}
+              <div>
+                <div className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">
+                  {d.direction === 'incoming' ? 'Ngày nhận' : 'Ngày phát hành'}
+                </div>
+                {editMode ? (
+                  <input type="date" value={(d.receivedDate ?? d.issuedDate ?? '').slice(0, 10)} onChange={(e) => setDirty((x) => ({ ...x, receivedDate: e.target.value }))} className="w-full text-sm bg-yellow-50 border border-yellow-300 rounded-lg px-3 py-1.5" />
+                ) : (
+                  <div className="text-sm font-semibold">{fmtDate(d.receivedDate) || fmtDate(d.issuedDate) || '—'}</div>
+                )}
+              </div>
+              {d.direction !== 'incoming' && (
+                <div>
+                  <div className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Người ký</div>
+                  {editMode ? (
+                    <input type="text" value={d.signedBy ?? ''} onChange={(e) => setDirty((x) => ({ ...x, signedBy: e.target.value }))} className="w-full text-sm bg-yellow-50 border border-yellow-300 rounded-lg px-3 py-1.5" />
+                  ) : (
+                    <div className="text-sm font-semibold">{d.signedBy || '—'}</div>
+                  )}
+                </div>
+              )}
+              {d.direction === 'outgoing' && (
+                <div>
+                  <div className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Nhận hồi lời</div>
+                  {editMode ? (
+                    <input type="text" value={d.responseRecipient ?? ''} onChange={(e) => setDirty((x) => ({ ...x, responseRecipient: e.target.value }))} className="w-full text-sm bg-yellow-50 border border-yellow-300 rounded-lg px-3 py-1.5" placeholder="Phòng HC, P. Giám đốc..." />
+                  ) : (
+                    <div className="text-sm font-semibold">{d.responseRecipient || '—'}</div>
+                  )}
+                </div>
+              )}
+              {d.direction !== 'incoming' && (
+                <div>
+                  <div className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Số bản</div>
+                  {editMode ? (
+                    <input type="number" min={1} value={d.copiesCount ?? 1} onChange={(e) => setDirty((x) => ({ ...x, copiesCount: Number(e.target.value) }))} className="w-full text-sm bg-yellow-50 border border-yellow-300 rounded-lg px-3 py-1.5" />
+                  ) : (
+                    <div className="text-sm font-semibold">{d.copiesCount ?? 1}</div>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Summary */}
           {(d.summary || editMode) && (
             <div className="glass-card p-6">
-              <h3 className="text-xs font-bold uppercase tracking-widest text-slate-500 mb-3 flex items-center gap-2">
+              <h3 className="text-xs font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-3 flex items-center gap-2">
                 📋 Tóm tắt
               </h3>
               {editMode ? (
-                <textarea value={String(d.summary ?? '')} onChange={(e) => setDirty((x) => ({ ...x, summary: e.target.value }))} rows={6} className="w-full text-sm bg-yellow-50 border border-yellow-300 rounded-lg px-3 py-2 font-mono" placeholder="Hỗ trợ Markdown: **bold**, *italic*, - danh sách, 1. số thứ tự, ## tiêu đề" />
+                <textarea value={String(d.summary ?? '')} onChange={(e) => setDirty((x) => ({ ...x, summary: e.target.value }))} rows={6} className="portal-edit-input font-mono" placeholder="Hỗ trợ Markdown: **bold**, *italic*, - danh sách, 1. số thứ tự, ## tiêu đề" />
               ) : (
-                <RichText text={d.summary} />
+                <div className="prose dark:prose-invert max-w-none text-xs leading-relaxed font-semibold text-[var(--text-main)]">
+                  <RichText text={d.summary} />
+                </div>
               )}
             </div>
           )}
@@ -233,13 +291,15 @@ export default function OfficialDocumentView({ recordId, onBack }) {
           {/* Content */}
           {(d.content || editMode) && (
             <div className="glass-card p-6">
-              <h3 className="text-xs font-bold uppercase tracking-widest text-slate-500 mb-3 flex items-center gap-2">
+              <h3 className="text-xs font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-3 flex items-center gap-2">
                 📄 Nội dung chi tiết
               </h3>
               {editMode ? (
-                <textarea value={String(d.content ?? '')} onChange={(e) => setDirty((x) => ({ ...x, content: e.target.value }))} rows={10} className="w-full text-sm bg-yellow-50 border border-yellow-300 rounded-lg px-3 py-2 font-mono" placeholder="Hỗ trợ Markdown" />
+                <textarea value={String(d.content ?? '')} onChange={(e) => setDirty((x) => ({ ...x, content: e.target.value }))} rows={10} className="portal-edit-input font-mono" placeholder="Hỗ trợ Markdown" />
               ) : (
-                <RichText text={d.content} />
+                <div className="prose dark:prose-invert max-w-none text-xs leading-relaxed font-semibold text-[var(--text-main)]">
+                  <RichText text={d.content} />
+                </div>
               )}
             </div>
           )}

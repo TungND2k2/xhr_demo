@@ -229,6 +229,7 @@ export async function runPipeline(input: PipelineInput): Promise<PipelineOutput>
     ? [chatter.firstName, chatter.lastName].filter(Boolean).join(" ").trim() || chatter.username || String(chatter.telegramUserId)
     : "?";
 
+  const portalUrl = config.PORTAL_URL;
   const headBlock = [
     "# THÔNG TIN BẮT BUỘC ĐỌC TRƯỚC TIÊN",
     "",
@@ -238,6 +239,22 @@ export async function runPipeline(input: PipelineInput): Promise<PipelineOutput>
     `- Timezone doanh nghiệp: Asia/Ho_Chi_Minh.`,
     `- Khi user nói "sáng mai", "1 phút nữa", "thứ 6 9h", "3 ngày nữa", "1p", "30p" → DỰA VÀO giờ VN ở trên để tính ISO 8601 với offset +07:00. CẤM hỏi user "mấy giờ rồi" hoặc yêu cầu xác nhận giờ — bạn ĐÃ CÓ giờ.`,
     `- "1p" = 1 phút. "1h" / "1 tiếng" = 1 giờ. KHÔNG nhầm lẫn.`,
+    "",
+    "## Portal khách hàng — LUÔN trả link Portal sau khi create / update / lookup",
+    `- Portal URL: ${portalUrl}`,
+    `- Sau khi gọi tool create_* hoặc update_* THÀNH CÔNG → BẮT BUỘC trong reply phải có link portal cho user click xem chi tiết, theo định dạng dưới:`,
+    `  • Worker (LĐ):              ${portalUrl}/workers/<id>`,
+    `  • Order (đơn YCTD):         ${portalUrl}/orders/<id>`,
+    `  • SupplyContract (HĐCU):    ${portalUrl}/supply-contracts/<id>`,
+    `  • Contract (HĐLĐ):          ${portalUrl}/contracts/<id>`,
+    `  • OfficialDocument (CV):    ${portalUrl}/official-documents/<id>`,
+    `  • Employee (nhân sự TLG):   ${portalUrl}/employees/<id>`,
+    `  • Partner (đối tác):        ${portalUrl}/partners/<id>`,
+    `  • Asset (tài sản):          ${portalUrl}/assets/<id>`,
+    `  • Media (file):             ${portalUrl}/media/<id>`,
+    `- Khi user hỏi "danh sách / list X" → trả link list page (vd ${portalUrl}/workers).`,
+    `- Khi user hỏi "báo cáo" → trả ${portalUrl}/reports.`,
+    `- KHÔNG trả link /admin/* (đó là trang quản trị kỹ thuật, user không hiểu).`,
   ];
 
   if (chatter) {
@@ -252,6 +269,9 @@ export async function runPipeline(input: PipelineInput): Promise<PipelineOutput>
       `- telegramUserId: ${chatter.telegramUserId}`,
       `- username: ${chatter.username ? "@" + chatter.username : "(không có)"}`,
       `- chatId: ${chatter.chatId} (${chatter.chatType}${chatter.chatTitle ? ` "${chatter.chatTitle}"` : ""})`,
+      chatter.messageThreadId !== undefined
+        ? `- topicId (message_thread_id): ${chatter.messageThreadId} — BẮT BUỘC truyền khi gọi create_xlsx_file / create_export_file để file gửi VÀO ĐÚNG topic này.`
+        : `- topicId: (không có — chat thường hoặc General topic; KHÔNG truyền threadId khi xuất file).`,
       "",
       `## VÍ DỤ THỰC TẾ — ÁP DỤNG NGAY KHÔNG HỎI LẠI`,
       "",

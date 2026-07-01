@@ -52,6 +52,7 @@ async function sendTelegramDocument(
   buffer: Buffer,
   mimeType: string,
   caption?: string,
+  threadId?: string,
 ): Promise<{ ok: boolean; error?: string }> {
   const token = process.env.TELEGRAM_BOT_TOKEN;
   if (!token) return { ok: false, error: "TELEGRAM_BOT_TOKEN không set" };
@@ -59,6 +60,7 @@ async function sendTelegramDocument(
   try {
     const form = new FormData();
     form.append("chat_id", chatId);
+    if (threadId) form.append("message_thread_id", threadId);
     form.append(
       "document",
       new Blob([new Uint8Array(buffer)], { type: mimeType }),
@@ -111,6 +113,12 @@ KHÔNG dùng tool này cho:
       .describe(
         "Telegram chatId để gửi file vào. Lấy từ 'chatId hiện tại' trong system prompt (xem block 'Người đang chat với bạn').",
       ),
+    threadId: z
+      .string()
+      .optional()
+      .describe(
+        "message_thread_id (topic của Forum supergroup). Lấy từ 'topicId hiện tại' trong system prompt. Bỏ trống nếu chat thường / DM.",
+      ),
     filename: z
       .string()
       .min(1)
@@ -131,7 +139,7 @@ KHÔNG dùng tool này cho:
         "Caption hiển thị dưới file trên Telegram (max 1024 ký tự, vd: 'Đây là báo cáo tháng 5.').",
       ),
   },
-  async ({ chatId, filename, content, mimeType, caption }) => {
+  async ({ chatId, threadId, filename, content, mimeType, caption }) => {
     const buffer = Buffer.from(content, "utf-8");
     if (buffer.length > 1024 * 1024) {
       return err(
@@ -175,7 +183,7 @@ KHÔNG dùng tool này cho:
     }
 
     // 2. Gửi file vào chat qua Telegram sendDocument
-    const send = await sendTelegramDocument(chatId, filename, buffer, mt, caption);
+    const send = await sendTelegramDocument(chatId, filename, buffer, mt, caption, threadId);
     if (!send.ok) {
       return err(
         `Đã upload media${mediaId ? ` #${mediaId}` : ""} nhưng gửi Telegram thất bại: ${send.error}`,
@@ -194,11 +202,17 @@ KHÔNG dùng tool này cho:
  * Mỗi sheet 1 worksheet trong workbook. Server dùng ExcelJS chuyển thành
  * file .xlsx UTF-8 đầy đủ tiếng Việt + format cơ bản (header bold).
  */
+type XlsxCell = string | number | boolean | null;
+
 async function buildXlsxBuffer(
   sheets: Array<{
     name: string;
     headers: string[];
-    rows: Array<Array<string | number | boolean | null>>;
+    rows: Array<Array<XlsxCell>>;
+    /** Rows ABOVE the header — tiêu đề công ty, mẫu số, ngày, ban kiểm kê... */
+    titleRows?: Array<Array<XlsxCell>>;
+    /** Rows BELOW the data table — chữ ký, ngày phát hành... */
+    footerRows?: Array<Array<XlsxCell>>;
   }>,
 ): Promise<Buffer> {
   const wb = new ExcelJS.Workbook();
@@ -206,7 +220,19 @@ async function buildXlsxBuffer(
   wb.created = new Date();
 
   for (const sheet of sheets) {
-    const ws = wb.addWorksheet(sheet.name.slice(0, 31) || "Sheet"); // Excel max 31 chars
+    const ws = wb.addWorksheet(sheet.name.slice(0, 31) || "Sheet");
+
+    // 1. Title rows (trên header) — không format
+    let titleRowCount = 0;
+    if (sheet.titleRows && sheet.titleRows.length > 0) {
+      for (const row of sheet.titleRows) {
+        ws.addRow(row);
+        titleRowCount += 1;
+      }
+    }
+
+    // 2. Header row — bold + xám
+    let headerRowIndex = 0;
     if (sheet.headers.length > 0) {
       const headerRow = ws.addRow(sheet.headers);
       headerRow.font = { bold: true };
@@ -215,25 +241,46 @@ async function buildXlsxBuffer(
         pattern: "solid",
         fgColor: { argb: "FFE0E0E0" },
       };
-      // Auto width: header length + 2 padding
-      ws.columns = sheet.headers.map((h) => ({
-        width: Math.max(h.length + 2, 12),
-      }));
+      headerRow.alignment = { vertical: "middle", wrapText: true };
+      headerRowIndex = titleRowCount + 1;
+      // Auto width: max(header length, longest data cell) + padding
+      ws.columns = sheet.headers.map((h, i) => {
+        let max = h.length;
+        for (const r of sheet.rows) {
+          const v = r[i];
+          if (v != null) max = Math.max(max, String(v).length);
+        }
+        return { width: Math.min(Math.max(max + 2, 12), 60) };
+      });
     }
+
+    // 3. Data rows
     for (const row of sheet.rows) {
       ws.addRow(row);
     }
-    // Freeze header row + auto filter
-    if (sheet.headers.length > 0) {
+
+    // 4. Footer rows — separator trống + content
+    if (sheet.footerRows && sheet.footerRows.length > 0) {
+      ws.addRow([]);
+      for (const row of sheet.footerRows) {
+        ws.addRow(row);
+      }
+    }
+
+    // 5. Freeze + filter chỉ áp dụng khi không có titleRows (báo cáo phẳng).
+    //    Biên bản (có titleRows) không cần filter, giữ nguyên layout in.
+    if (sheet.headers.length > 0 && titleRowCount === 0) {
       ws.views = [{ state: "frozen", ySplit: 1 }];
       ws.autoFilter = {
         from: { row: 1, column: 1 },
         to: { row: 1, column: sheet.headers.length },
       };
+    } else if (sheet.headers.length > 0) {
+      // Có titleRows: chỉ freeze ở row header (không bật filter — để file in nhìn sạch).
+      ws.views = [{ state: "frozen", ySplit: headerRowIndex }];
     }
   }
 
-  // ExcelJS trả ArrayBuffer-like, convert sang Buffer
   const arrayBuffer = await wb.xlsx.writeBuffer();
   return Buffer.from(arrayBuffer as ArrayBuffer);
 }
@@ -264,6 +311,12 @@ Ví dụ:
 - "Đối chiếu phí dịch vụ Q2" → 1 sheet với cột số tiền`,
   {
     chatId: z.string().describe("Telegram chatId hiện tại từ system prompt"),
+    threadId: z
+      .string()
+      .optional()
+      .describe(
+        "message_thread_id (topic của Forum supergroup). Lấy từ 'topicId hiện tại' trong system prompt. Bỏ trống nếu chat thường / DM.",
+      ),
     filename: z
       .string()
       .min(1)
@@ -272,7 +325,7 @@ Ví dụ:
       .array(
         z.object({
           name: z.string().describe("Tên sheet/tab (≤ 31 ký tự)"),
-          headers: z.array(z.string()).describe("Tên các cột — dòng đầu"),
+          headers: z.array(z.string()).describe("Tên các cột — dòng header (bold, xám)"),
           rows: z
             .array(
               z.array(
@@ -285,13 +338,33 @@ Ví dụ:
               ),
             )
             .describe("Mảng các dòng data, mỗi dòng = mảng cell theo thứ tự headers"),
+          titleRows: z
+            .array(
+              z.array(
+                z.union([z.string(), z.number(), z.boolean(), z.null()]),
+              ),
+            )
+            .optional()
+            .describe(
+              "Rows TRÊN header (không format). Dùng cho biên bản kiểm kê, báo cáo có header công ty, mẫu số, ngày, ban kiểm kê...",
+            ),
+          footerRows: z
+            .array(
+              z.array(
+                z.union([z.string(), z.number(), z.boolean(), z.null()]),
+              ),
+            )
+            .optional()
+            .describe(
+              "Rows DƯỚI bảng data (không format). Dùng cho chữ ký, ngày phát hành, người lập...",
+            ),
         }),
       )
       .min(1)
       .describe("Danh sách sheets (workbook có thể có nhiều tab)"),
     caption: z.string().optional().describe("Caption hiển thị dưới file (tối đa 1024)"),
   },
-  async ({ chatId, filename, sheets, caption }) => {
+  async ({ chatId, threadId, filename, sheets, caption }) => {
     if (!filename.toLowerCase().endsWith(".xlsx")) {
       filename = filename.replace(/\.[^.]*$/, "") + ".xlsx";
     }
@@ -344,7 +417,7 @@ Ví dụ:
     }
 
     // Gửi qua Telegram
-    const send = await sendTelegramDocument(chatId, filename, buffer, mt, caption);
+    const send = await sendTelegramDocument(chatId, filename, buffer, mt, caption, threadId);
     if (!send.ok) {
       return err(
         `Đã upload media${mediaId ? ` #${mediaId}` : ""} nhưng gửi Telegram thất bại: ${send.error}`,

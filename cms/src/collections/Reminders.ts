@@ -183,6 +183,36 @@ export const Reminders: CollectionConfig = {
       ],
     },
     {
+      name: "emailRecipients",
+      label: "✉️ Gửi email khi tới hạn (tuỳ chọn)",
+      type: "array",
+      labels: { singular: "Email", plural: "Emails" },
+      admin: {
+        description:
+          "Ngoài bắn Telegram, bot sẽ gửi email cho các địa chỉ này đúng lúc reminder fire. Cần cấu hình SMTP ở /admin/globals/email-settings + địa chỉ có trong whitelist.",
+      },
+      fields: [
+        {
+          type: "row",
+          fields: [
+            {
+              name: "email",
+              label: "Email",
+              type: "text",
+              required: true,
+              admin: { width: "70%", placeholder: "huong@tlg.vn" },
+            },
+            {
+              name: "note",
+              label: "Ghi chú",
+              type: "text",
+              admin: { width: "30%", placeholder: "c.Hương" },
+            },
+          ],
+        },
+      ],
+    },
+    {
       name: "snoozeUntil",
       label: "Tạm hoãn tới",
       type: "date",

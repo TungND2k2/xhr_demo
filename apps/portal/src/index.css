@@ -5,31 +5,31 @@
 @tailwind utilities;
 
 :root {
-  --bg-main: #f8fafc;
-  --sidebar-bg: #ffffff;
-  --card-bg: #ffffff;
-  --accent-blue: #3b82f6;
-  --accent-blue-rgb: 59, 130, 246;
-  --accent-glow: rgba(59, 130, 246, 0.15);
-  --text-main: #1e293b;
-  --text-muted: #64748b;
-  --border-color: rgba(0, 0, 0, 0.08);
+  --bg-main: #f1f5f9;
+  --sidebar-bg: rgba(255, 255, 255, 0.75);
+  --card-bg: rgba(255, 255, 255, 0.55);
+  --accent-blue: #2563eb;
+  --accent-blue-rgb: 37, 99, 235;
+  --accent-glow: rgba(37, 99, 235, 0.08);
+  --text-main: #0f172a;
+  --text-muted: #475569;
+  --border-color: rgba(0, 0, 0, 0.05);
 }
 
 .dark {
-  --bg-main: #0a0b0e;
-  --sidebar-bg: #121212;
-  --card-bg: #1a1a1a;
-  --accent-blue: #00f2ff;
-  --accent-blue-rgb: 0, 242, 255;
-  --accent-glow: rgba(0, 242, 255, 0.4);
-  --accent-purple: #bc13fe;
-  --accent-purple-rgb: 188, 19, 254;
-  --text-main: #f0f2f5;
+  --bg-main: #06080c;
+  --sidebar-bg: rgba(10, 11, 14, 0.8);
+  --card-bg: rgba(20, 22, 28, 0.6);
+  --accent-blue: #38bdf8;
+  --accent-blue-rgb: 56, 189, 248;
+  --accent-glow: rgba(56, 189, 248, 0.15);
+  --accent-purple: #c084fc;
+  --accent-purple-rgb: 192, 132, 252;
+  --text-main: #f8fafc;
   --text-muted: #94a3b8;
-  --border-color: rgba(255, 255, 255, 0.05);
-  --neon-cyan: #00f2ff;
-  --neon-purple: #bc13fe;
+  --border-color: rgba(255, 255, 255, 0.04);
+  --neon-cyan: #38bdf8;
+  --neon-purple: #c084fc;
 }
 
 body {
@@ -39,39 +39,42 @@ body {
 }
 
 .neon-border-cyan {
-  box-shadow: 0 0 10px rgba(0, 242, 255, 0.3), inset 0 0 5px rgba(0, 242, 255, 0.1);
+  box-shadow: 0 0 10px rgba(56, 189, 248, 0.3), inset 0 0 5px rgba(56, 189, 248, 0.1);
 }
 
 .neon-border-purple {
-  box-shadow: 0 0 10px rgba(188, 19, 254, 0.3), inset 0 0 5px rgba(188, 19, 254, 0.1);
+  box-shadow: 0 0 10px rgba(192, 132, 252, 0.3), inset 0 0 5px rgba(192, 132, 252, 0.1);
 }
 
 .neon-text-cyan {
-  text-shadow: 0 0 8px rgba(0, 242, 255, 0.6);
+  text-shadow: 0 0 8px rgba(56, 189, 248, 0.6);
 }
 
 .neon-text-purple {
-  text-shadow: 0 0 8px rgba(188, 19, 254, 0.6);
+  text-shadow: 0 0 8px rgba(192, 132, 252, 0.6);
 }
 
 .glass-morphism {
   background: rgba(255, 255, 255, 0.03);
-  backdrop-filter: blur(16px) saturate(180%);
-  -webkit-backdrop-filter: blur(16px) saturate(180%);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
   border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .glass-card {
-  background: var(--sidebar-bg);
-  backdrop-filter: blur(12px);
+  background: var(--card-bg);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
   border: 1px solid var(--border-color);
   @apply rounded-3xl transition-all duration-300;
+  box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.03);
 }
 
 .glass-card:hover {
-  border-color: rgba(var(--accent-blue-rgb), 0.2);
-  background: var(--sidebar-bg);
-  @apply shadow-lg;
+  border-color: rgba(var(--accent-blue-rgb), 0.25);
+  background: var(--card-bg);
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.04), 0 0 1px rgba(var(--accent-blue-rgb), 0.1);
+  @apply -translate-y-0.5 shadow-lg;
 }
 
 .sidebar-item-active {
@@ -122,6 +125,156 @@ body {
 
 .no-scrollbar::-webkit-scrollbar { display: none; }
 .no-scrollbar { scrollbar-width: none; }
+
+/* Custom Badge/Pill System */
+.badge-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.25rem 0.625rem;
+  border-radius: 9999px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-width: 1px;
+  transition: all 0.2s ease;
+}
+.badge-blue {
+  background-color: rgba(59, 130, 246, 0.08);
+  color: #3b82f6;
+  border-color: rgba(59, 130, 246, 0.15);
+}
+.dark .badge-blue {
+  background-color: rgba(59, 130, 246, 0.15);
+  color: #60a5fa;
+  border-color: rgba(59, 130, 246, 0.25);
+}
+
+.badge-green {
+  background-color: rgba(16, 185, 129, 0.08);
+  color: #10b981;
+  border-color: rgba(16, 185, 129, 0.15);
+}
+.dark .badge-green {
+  background-color: rgba(16, 185, 129, 0.15);
+  color: #34d399;
+  border-color: rgba(16, 185, 129, 0.25);
+}
+
+.badge-amber {
+  background-color: rgba(245, 158, 11, 0.08);
+  color: #f59e0b;
+  border-color: rgba(245, 158, 11, 0.15);
+}
+.dark .badge-amber {
+  background-color: rgba(245, 158, 11, 0.15);
+  color: #fbbf24;
+  border-color: rgba(245, 158, 11, 0.25);
+}
+
+.badge-red {
+  background-color: rgba(239, 68, 68, 0.08);
+  color: #ef4444;
+  border-color: rgba(239, 68, 68, 0.15);
+}
+.dark .badge-red {
+  background-color: rgba(239, 68, 68, 0.15);
+  color: #f87171;
+  border-color: rgba(239, 68, 68, 0.25);
+}
+
+.badge-purple {
+  background-color: rgba(168, 85, 247, 0.08);
+  color: #a855f7;
+  border-color: rgba(168, 85, 247, 0.15);
+}
+.dark .badge-purple {
+  background-color: rgba(168, 85, 247, 0.15);
+  color: #c084fc;
+  border-color: rgba(168, 85, 247, 0.25);
+}
+
+.badge-cyan {
+  background-color: rgba(6, 182, 212, 0.08);
+  color: #06b6d4;
+  border-color: rgba(6, 182, 212, 0.15);
+}
+.dark .badge-cyan {
+  background-color: rgba(6, 182, 212, 0.15);
+  color: #22d3ee;
+  border-color: rgba(6, 182, 212, 0.25);
+}
+
+.badge-slate {
+  background-color: rgba(100, 116, 139, 0.08);
+  color: #64748b;
+  border-color: rgba(100, 116, 139, 0.15);
+}
+.dark .badge-slate {
+  background-color: rgba(148, 163, 184, 0.12);
+  color: #94a3b8;
+  border-color: rgba(148, 163, 184, 0.2);
+}
+
+/* Premium Portal Table */
+.portal-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.portal-table thead {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  background-color: rgba(0, 0, 0, 0.015);
+}
+.dark .portal-table thead {
+  background-color: rgba(255, 255, 255, 0.015);
+}
+.portal-table th {
+  padding: 0.875rem 1.25rem;
+  font-weight: 700;
+  text-align: left;
+  border-bottom: 1px solid var(--border-color);
+}
+.portal-table tbody tr {
+  border-bottom: 1px solid var(--border-color);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.portal-table tbody tr:hover {
+  background-color: rgba(59, 130, 246, 0.025);
+}
+.dark .portal-table tbody tr:hover {
+  background-color: rgba(0, 242, 255, 0.015);
+}
+.portal-table td {
+  padding: 0.875rem 1.25rem;
+  color: var(--text-main);
+  vertical-align: middle;
+}
+
+/* Styled Form Focus & Edit states */
+.portal-edit-input {
+  width: 100%;
+  background-color: rgba(254, 243, 199, 0.5); /* soft amber */
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  border-radius: 0.375rem;
+  padding: 0.25rem 0.5rem;
+  font-size: 12px;
+  outline: none;
+  transition: all 0.15s ease;
+}
+.dark .portal-edit-input {
+  background-color: rgba(245, 158, 11, 0.05);
+  border-color: rgba(245, 158, 11, 0.4);
+  color: var(--text-main);
+}
+.portal-edit-input:focus {
+  border-color: #f59e0b;
+  box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.2);
+}
 
 /* Print: chỉ in phần .print-area, ẩn sidebar + header + nút action.
  * Người dùng chọn "Save as PDF" trong dialog Print để xuất PDF. */

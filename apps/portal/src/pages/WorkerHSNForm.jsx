@@ -161,7 +161,7 @@ export default function WorkerHSNForm({ recordId, onBack }) {
     // Edit mode + editable
     const current = String(raw(fieldName, workerKey) ?? '');
     const set = (newVal) => setDirty((d) => ({ ...d, [fieldName]: newVal }));
-    const cls = 'w-full bg-yellow-50 border border-yellow-300 rounded px-1 py-0.5 text-xs';
+    const cls = 'portal-edit-input';
 
     if (cfg.type === 'select') {
       return (
@@ -257,17 +257,17 @@ export default function WorkerHSNForm({ recordId, onBack }) {
   return (
     <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-5">
       <div className="flex items-center justify-between no-print">
-        <button onClick={onBack} className="flex items-center gap-2 text-sm text-slate-500 hover:text-[var(--text-main)] transition-colors">
-          <ArrowLeft size={16} /> Quay lại danh sách LĐ
+        <button onClick={onBack} className="flex items-center gap-2 text-xs font-bold text-slate-400 hover:text-[var(--text-main)] transition-colors">
+          <ArrowLeft size={16} /> QUAY LẠI
         </button>
         <div className="flex gap-2">
           {!editMode && (
             <>
-              <button onClick={printPdf} className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-xl border border-[var(--border-color)] hover:border-blue-500/40 hover:bg-blue-500/5 transition-all">
-                <Printer size={14} /> In / PDF
+              <button onClick={printPdf} className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold rounded-xl border border-[var(--border-color)] hover:border-red-500/30 hover:bg-red-500/5 text-slate-600 dark:text-slate-300 hover:text-red-500 dark:hover:text-red-400 transition-all shadow-sm">
+                <Printer size={14} className="text-red-500" /> In / PDF
               </button>
-              <button onClick={() => setEditMode(true)} className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-xl border border-blue-500/40 text-blue-500 hover:bg-blue-500/10 transition-all">
-                <Edit2 size={14} /> Sửa
+              <button onClick={() => setEditMode(true)} className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold rounded-xl border border-blue-500/40 text-blue-500 hover:bg-blue-500/10 transition-all shadow-sm">
+                <Edit2 size={14} /> Chỉnh sửa
               </button>
               <DeleteButton
                 collection="workers"
@@ -279,10 +279,10 @@ export default function WorkerHSNForm({ recordId, onBack }) {
           )}
           {editMode && (
             <>
-              <button onClick={handleCancel} disabled={saving} className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-xl border border-[var(--border-color)] hover:border-red-500/40 hover:bg-red-500/5 transition-all">
-                <X size={14} /> Huỷ
+              <button onClick={handleCancel} disabled={saving} className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold rounded-xl border border-[var(--border-color)] hover:border-red-500/40 hover:bg-red-500/5 transition-all text-slate-500">
+                <X size={14} /> Huỷ bỏ
               </button>
-              <button onClick={handleSave} disabled={saving} className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-xl border border-green-500/40 text-green-600 hover:bg-green-500/10 transition-all disabled:opacity-40">
+              <button onClick={handleSave} disabled={saving} className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold rounded-xl border border-green-500/40 text-green-600 hover:bg-green-500/10 transition-all disabled:opacity-40">
                 <Save size={14} /> {saving ? 'Đang lưu...' : 'Lưu thay đổi'}
               </button>
             </>
@@ -291,9 +291,10 @@ export default function WorkerHSNForm({ recordId, onBack }) {
       </div>
 
       {editMode && (
-        <div className="bg-yellow-50 border border-yellow-300 rounded-xl px-4 py-2 text-xs text-yellow-800 no-print">
-          ✏ Chế độ chỉnh sửa — ô đang được sửa có viền vàng. Bấm "Lưu thay đổi" để PATCH lên DB.
-          {Object.keys(dirty).length > 0 && <span className="ml-2 font-bold">({Object.keys(dirty).length} field thay đổi)</span>}
+        <div className="bg-amber-500/10 border border-amber-500/20 backdrop-blur-md rounded-2xl px-5 py-3 text-xs text-amber-600 dark:text-amber-400 no-print flex items-center gap-2 shadow-sm font-semibold">
+          <Edit2 size={14} className="animate-pulse text-amber-500" />
+          <span>Chế độ chỉnh sửa tích hợp — Các ô có viền cam nhạt có thể thay đổi trực tiếp. Bấm <b>"Lưu thay đổi"</b> để cập nhật dữ liệu.</span>
+          {Object.keys(dirty).length > 0 && <span className="ml-auto bg-amber-500/20 px-2.5 py-1 rounded-lg font-bold">({Object.keys(dirty).length} thay đổi)</span>}
         </div>
       )}
 

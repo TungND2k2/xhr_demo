@@ -1,4 +1,5 @@
 import type { CollectionConfig } from "payload";
+import { syncAgentTelegramBindings } from "../hooks/agents/sync-telegram-bindings";
 
 /**
  * Agents — trợ lý AI chuyên trách 1 mảng nghiệp vụ.
@@ -81,6 +82,7 @@ const FORM_TOOLS: ToolDef[] = [
   cb("submit_form", "📝 Nộp form"),
   cb("list_form_submissions", "📋 Liệt kê submission"),
   cb("get_form_submission", "🔍 Xem 1 submission"),
+  cb("generate_form_link", "🔗 Tạo link form cho LĐ tự điền"),
 ];
 const MEDIA_TOOLS: ToolDef[] = [
   cb("search_media", "🔎 Tìm file đã upload"),
@@ -95,8 +97,24 @@ const REMINDER_TOOLS: ToolDef[] = [
   cb("dismiss_reminder", "🚫 Huỷ lịch nhắc"),
 ];
 const USER_TOOLS: ToolDef[] = [
-  cb("list_users", "📋 Liệt kê nhân viên"),
-  cb("get_user", "🔍 Xem 1 nhân viên"),
+  cb("list_users", "📋 Liệt kê tài khoản"),
+  cb("get_user", "🔍 Xem 1 tài khoản"),
+  cb("create_user", "➕ Tạo tài khoản mới"),
+  cb("update_user", "✏️ Cập nhật tài khoản"),
+];
+const EMPLOYEE_TOOLS: ToolDef[] = [
+  cb("list_employees", "📋 Liệt kê nhân sự"),
+  cb("get_employees", "🔍 Xem 1 nhân sự"),
+  cb("create_employees", "➕ Tạo nhân sự mới"),
+  cb("update_employees", "✏️ Cập nhật nhân sự"),
+  cb("delete_employees", "🗑 Xoá nhân sự"),
+];
+const OFFICIAL_DOCUMENT_TOOLS: ToolDef[] = [
+  cb("list_official_documents", "📋 Liệt kê công văn", "list_official-documents"),
+  cb("get_official_documents", "🔍 Xem 1 công văn", "get_official-documents"),
+  cb("create_official_documents", "➕ Tạo công văn mới", "create_official-documents"),
+  cb("update_official_documents", "✏️ Cập nhật công văn", "update_official-documents"),
+  cb("delete_official_documents", "🗑 Xoá công văn", "delete_official-documents"),
 ];
 const TELEGRAM_IDENTITY_TOOLS: ToolDef[] = [
   cb("lookup_telegram_user", "🔎 Tra cứu user Telegram"),
@@ -122,6 +140,21 @@ const ASSET_TOOLS: ToolDef[] = [
   cb("delete_assets", "🗑 Xoá tài sản"),
 ];
 const EMAIL_TOOLS: ToolDef[] = [cb("send_email", "✉️ Gửi email")];
+const PARTNER_TOOLS: ToolDef[] = [
+  cb("list_partners", "📋 Liệt kê đối tác"),
+  cb("get_partners", "🔍 Xem 1 đối tác"),
+  cb("create_partners", "➕ Tạo đối tác mới"),
+  cb("update_partners", "✏️ Cập nhật đối tác"),
+  cb("delete_partners", "🗑 Xoá đối tác"),
+];
+const SUPPLY_CONTRACT_TOOLS: ToolDef[] = [
+  cb("list_supply_contracts", "📋 Liệt kê HĐCU", "list_supply-contracts"),
+  cb("get_supply_contracts", "🔍 Xem 1 HĐCU", "get_supply-contracts"),
+  cb("create_supply_contracts", "➕ Tạo HĐCU mới", "create_supply-contracts"),
+  cb("update_supply_contracts", "✏️ Cập nhật HĐCU", "update_supply-contracts"),
+  cb("delete_supply_contracts", "🗑 Xoá HĐCU", "delete_supply-contracts"),
+  cb("extract_supply_contract", "🪄 AI extract HĐCU từ scan"),
+];
 
 // Build group field từ tool list — mỗi tool thành 1 checkbox field.
 // Field đầu tiên `_selectAll` là UI custom (master checkbox) — tick → tick hết
@@ -167,6 +200,11 @@ export const Agents: CollectionConfig = {
     create: ({ req: { user } }) => ["admin", "manager"].includes(user?.role ?? ""),
     update: ({ req: { user } }) => ["admin", "manager"].includes(user?.role ?? ""),
     delete: ({ req: { user } }) => user?.role === "admin",
+  },
+  hooks: {
+    // Khi admin edit agent + thêm/sửa items trong `telegramBindings`, hook
+    // tự upsert TelegramGroup + TelegramTopic và set Topic.agent = self.
+    afterChange: [syncAgentTelegramBindings],
   },
   fields: [
     {
@@ -252,7 +290,9 @@ export const Agents: CollectionConfig = {
           "Tìm file + đọc nội dung",
         ),
         toolGroup("reminders", "🔔 Nhắc nhở (Reminders)", REMINDER_TOOLS),
-        toolGroup("users", "🧑‍💼 Người dùng hệ thống", USER_TOOLS),
+        toolGroup("users", "🔐 Tài khoản login (Users)", USER_TOOLS, "Account login portal — KHÁC Employee (HR profile)"),
+        toolGroup("employees", "👥 Nhân sự nội bộ (Employees)", EMPLOYEE_TOOLS, "Hồ sơ HR đầy đủ: lương, phòng ban, chức vụ, HĐLĐ"),
+        toolGroup("officialDocuments", "📨 Công văn (Official Documents)", OFFICIAL_DOCUMENT_TOOLS, "Quản công văn đến/đi/nội bộ. Bộ alias `_` → `-` cho tool slug."),
         toolGroup(
           "telegramIdentity",
           "💬 Telegram identity",
@@ -283,17 +323,80 @@ export const Agents: CollectionConfig = {
           EMAIL_TOOLS,
           "Gửi email cho lãnh đạo. Cần SMTP config trên server.",
         ),
+        toolGroup(
+          "partners",
+          "🏢 Đối tác (Partners)",
+          PARTNER_TOOLS,
+          "Danh bạ đối tác/xí nghiệp nước ngoài (đối tác của Order).",
+        ),
+        toolGroup(
+          "supplyContracts",
+          "📜 HĐ cung ứng (HĐCU)",
+          SUPPLY_CONTRACT_TOOLS,
+          "Hợp đồng khung TLG ↔ Đối tác. Có tool AI extract data từ file scan.",
+        ),
+      ],
+    },
+    {
+      name: "telegramBindings",
+      label: "💬 Gắn vào topic Telegram",
+      type: "array",
+      labels: { singular: "Binding", plural: "Bindings" },
+      admin: {
+        description:
+          "Nhập chatId + topicId — khi save, hệ thống tự tạo/sửa record TelegramGroup + TelegramTopic và set agent này phụ trách. Topic chính (không Forum) → topicId = 1.",
+      },
+      fields: [
+        {
+          type: "row",
+          fields: [
+            {
+              name: "chatId",
+              label: "Chat ID",
+              type: "text",
+              required: true,
+              admin: {
+                width: "35%",
+                placeholder: "-3998446311",
+                description: "ID nhóm Telegram (số âm).",
+              },
+            },
+            {
+              name: "topicId",
+              label: "Topic ID",
+              type: "text",
+              required: true,
+              admin: {
+                width: "30%",
+                placeholder: "4294967298",
+                description: "message_thread_id của forum topic.",
+              },
+            },
+            {
+              name: "title",
+              label: "Tên topic (tuỳ chọn)",
+              type: "text",
+              admin: {
+                width: "35%",
+                placeholder: "vd: Tài sản",
+              },
+            },
+          ],
+        },
       ],
     },
     {
       name: "docs",
-      label: "Docs (markdown)",
+      label: "Instructions",
       type: "textarea",
       required: true,
       admin: {
         rows: 25,
         description:
-          "Vai trò + Phạm vi + Quy trình nghiệp vụ + Rules + Hand-off + Ví dụ. Viết tiếng Việt tự nhiên kiểu training nhân viên mới. Engine sẽ ghép vào sau base prompt khi runtime.",
+          "Vai trò + Phạm vi + Quy trình + Rules + Hand-off + Ví dụ. Bấm các nút trên thanh công cụ để format (đậm, tiêu đề, danh sách...) — không cần biết markdown.",
+        components: {
+          Field: "/components/admin/MarkdownField",
+        },
       },
       defaultValue: `# Trợ lý [Tên]
 

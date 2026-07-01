@@ -28,6 +28,7 @@ import { payload, PayloadError } from "../payload/client.js";
 import { convertToMarkdown, MarkItDownError } from "../extraction/markitdown.js";
 import { pdfToImages, PdfToImagesError } from "../extraction/pdf-to-images.js";
 import { describeScannedPdf } from "../extraction/describe.js";
+import { validateFile } from "../extraction/file-validator.js";
 
 interface ImportStats {
   total: number;
@@ -60,6 +61,24 @@ const SUPPORTED_EXTS = new Set([
   ".txt",
   ".md",
   ".csv",
+]);
+
+// Whitelist các giá trị `kind` được Media collection chấp nhận. Vision AI
+// thỉnh thoảng trả slug ngẫu hứng (vd "HĐCU", "labor_contract") → ép về
+// "supply_contract" (đối với bulk-import HĐCU) cho an toàn.
+const VALID_KINDS = new Set([
+  "id_doc",
+  "health_cert",
+  "supply_contract",
+  "contract",
+  "visa_doc",
+  "flight",
+  "cv",
+  "portrait",
+  "invoice",
+  "form",
+  "partner_doc",
+  "other",
 ]);
 
 const MIME_MAP: Record<string, string> = {
@@ -168,28 +187,47 @@ async function processFile(
     const sizeKb = (buffer.length / 1024).toFixed(1);
     logger.info("Import", `▶ ${filename} (${sizeKb}KB)`);
 
+    // Magika sniff — reject file giả mạo / executable / corrupted trước khi upload S3
+    const validation = await validateFile(buffer, filename);
+    if (!validation.allowed) {
+      logger.warn("Import", `  🛑 reject: ${validation.reason} (detected=${validation.detectedLabel})`);
+      stats.failed += 1;
+      stats.failedFiles.push(filename);
+      return;
+    }
+
     const meta = parseHdcuFilename(filename);
     logger.info(
       "Import",
       `  📋 parsed: date=${meta.signedDate ?? "?"}, employer="${meta.employer}", program=${meta.programType}`,
     );
 
-    // 1. Find Media by filename — reuse nếu đã có, upload mới nếu chưa
+    // 1. Find Media by filename — reuse nếu đã có, upload mới nếu chưa.
+    //    Nếu media cũ chưa có `extractedText` (vd: lần chạy trước upload xong
+    //    nhưng PATCH metadata fail) → coi như "mới" để chạy lại extract+PATCH.
     let mediaId: string;
     let mediaWasNew = false;
-    const existing = await payload.request<{ docs: Array<{ id: string }> }>(
-      `/api/media`,
-      {
-        query: {
-          where: { filename: { equals: filename } },
-          limit: 1,
-          depth: 0,
-        },
+    const existing = await payload.request<{
+      docs: Array<{ id: string; extractedText?: string | null }>;
+    }>(`/api/media`, {
+      query: {
+        where: { filename: { equals: filename } },
+        limit: 1,
+        depth: 0,
       },
-    );
+    });
     if (existing.docs.length > 0) {
       mediaId = existing.docs[0].id;
-      logger.info("Import", `  ↻ media đã tồn tại (#${mediaId}) — reuse`);
+      const hasText = (existing.docs[0].extractedText ?? "").trim().length >= 50;
+      if (hasText) {
+        logger.info("Import", `  ↻ media đã có metadata (#${mediaId}) — reuse`);
+      } else {
+        mediaWasNew = true;
+        logger.info(
+          "Import",
+          `  ↻ media tồn tại nhưng thiếu extractedText (#${mediaId}) — re-extract`,
+        );
+      }
     } else {
       const media = (await payload.uploadMedia({
         buffer,
@@ -265,90 +303,77 @@ async function processFile(
           .filter(Boolean)
           .join(". ");
 
-      await payload.request(`/api/media/${encodeURIComponent(mediaId)}`, {
-        method: "PATCH",
-        body: {
-          uploadedFrom: "api",
-          kind: visionKind ?? "contract",
-          description: mediaDescription,
-          extractedText: extractedText.slice(0, 50_000),
-        },
-      });
-      logger.info(
-        "Import",
-        `  ✓ patched media#${mediaId} (kind=${visionKind ?? "contract"}, ${extractionMethod})`,
-      );
-    }
-
-    // 6. Tạo Order draft + link media qua orderDocuments
-    //    Bot không xoá Order có status='paused' của bulk import → safe để rerun.
-    const contractNumber = meta.baseName.slice(0, 80); // unique-ish identifier
-    const existingOrder = await payload.request<{ docs: Array<{ id: string; orderCode?: string }> }>(
-      `/api/orders`,
-      {
-        query: {
-          where: { contractNumber: { equals: contractNumber } },
-          limit: 1,
-          depth: 0,
-        },
-      },
-    );
-
-    if (existingOrder.docs.length > 0) {
-      logger.info(
-        "Import",
-        `  ⊘ order đã tồn tại (#${existingOrder.docs[0].orderCode ?? existingOrder.docs[0].id}) — không tạo mới`,
-      );
-    } else {
-      try {
-        // deadline là field required. Đặt = signedDate + 1 năm (placeholder
-        // hợp lệ cho draft); admin sẽ edit lại khi activate đơn.
-        const fallbackDeadline = meta.signedDate
-          ? new Date(new Date(meta.signedDate).getTime() + 365 * 86400_000)
-              .toISOString()
-              .slice(0, 10)
-          : new Date(Date.now() + 365 * 86400_000).toISOString().slice(0, 10);
-
-        const orderBody: Record<string, unknown> = {
-          market: "jp",
-          employer: meta.employer,
-          employerCountry: "Japan",
-          position: `[Draft] ${meta.programType} — chưa xác định vị trí`,
-          quantityNeeded: 1,
-          contractNumber,
-          contractDate: meta.signedDate,
-          deadline: fallbackDeadline,
-          status: "paused", // draft state — admin sẽ activate sau khi điền đủ
-          notes:
-            `Bulk imported từ file scan HĐCU.\n` +
-            `Filename gốc: ${filename}\n` +
-            `Program: ${meta.programType}${meta.signedDate ? "\nNgày ký HĐCU: " + meta.signedDate : ""}\n` +
-            `Admin cần edit để bổ sung: position, quantityNeeded, lương, deadline...`,
-          orderDocuments: [
-            {
-              kind: "HĐCU scan",
-              file: mediaId,
-              notes: `Scan bản gốc HĐCU - ${meta.employer}`,
-            },
-          ],
-        };
-        const createdOrder = await payload.request<{ doc: { id: string; orderCode?: string } }>(
-          `/api/orders`,
-          { method: "POST", body: orderBody },
+      // Validate kind — Payload select chỉ chấp nhận giá trị trong enum.
+      // Bulk import này phục vụ HĐCU → mặc định "supply_contract".
+      const safeKind = visionKind && VALID_KINDS.has(visionKind) ? visionKind : "supply_contract";
+      if (visionKind && safeKind !== visionKind) {
+        logger.warn(
+          "Import",
+          `  ⚠️ AI trả kind="${visionKind}" không hợp lệ → fallback "contract"`,
         );
-        stats.ordersCreated += 1;
+      }
+
+      // Sanitize extractedText:
+      //  - Strip control chars (\x00-\x1F trừ \t \n \r) — Payload textarea
+      //    reject string chứa null byte; MarkItDown PDF có thể đẻ ra mấy
+      //    byte này.
+      //  - Cap 30K để không vượt limit ngầm của Payload/Mongo.
+      const safeText = extractedText
+        .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, "")
+        .slice(0, 30_000);
+
+      try {
+        await payload.request(`/api/media/${encodeURIComponent(mediaId)}`, {
+          method: "PATCH",
+          body: {
+            uploadedFrom: "api",
+            kind: safeKind,
+            description: mediaDescription,
+            extractedText: safeText,
+          },
+        });
         logger.info(
           "Import",
-          `  ✓ order#${createdOrder.doc.orderCode ?? createdOrder.doc.id} created + linked media`,
+          `  ✓ patched media#${mediaId} (kind=${safeKind}, ${extractionMethod}, ${safeText.length} chars)`,
         );
       } catch (err) {
+        // PATCH fail không nên kill flow. Retry không kèm extractedText
+        // (loại khả năng do text quá lớn / ký tự lạ).
         const reason = err instanceof PayloadError ? err.message : String(err);
         logger.warn(
           "Import",
-          `  ⚠️ tạo Order thất bại: ${reason} — Media đã lưu nhưng chưa link`,
+          `  ⚠️ PATCH full fail (${reason}) — retry không kèm extractedText`,
         );
+        try {
+          await payload.request(`/api/media/${encodeURIComponent(mediaId)}`, {
+            method: "PATCH",
+            body: {
+              uploadedFrom: "api",
+              kind: safeKind,
+              description: mediaDescription,
+            },
+          });
+          logger.info(
+            "Import",
+            `  ✓ patched media#${mediaId} (kind=${safeKind}, no extractedText)`,
+          );
+        } catch (err2) {
+          const reason2 = err2 instanceof PayloadError ? err2.message : String(err2);
+          logger.warn(
+            "Import",
+            `  ⚠️ PATCH retry vẫn fail (${reason2}) — bỏ qua media này`,
+          );
+        }
       }
     }
+
+    // Bulk import HĐCU CHỈ upload Media + extract text + PATCH metadata.
+    // KHÔNG tạo Order draft (sau khi tách HĐCU vào collection riêng
+    // `supply-contracts`, Order = đơn tuyển cụ thể từ Thư YCTD — không
+    // suy từ HĐCU được).
+    //
+    // Sau khi script này xong, chạy `extract-supply-contracts.js` để AI
+    // đọc Media.extractedText → tạo SupplyContract + Partner với data thật.
   } catch (err) {
     const msg =
       err instanceof PayloadError

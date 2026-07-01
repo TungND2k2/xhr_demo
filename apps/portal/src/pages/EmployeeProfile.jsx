@@ -112,16 +112,16 @@ export default function EmployeeProfile({ recordId, onBack }) {
   return (
     <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-5">
       <div className="flex items-center justify-between no-print">
-        <button onClick={onBack} className="flex items-center gap-2 text-sm text-slate-500 hover:text-[var(--text-main)]">
-          <ArrowLeft size={16} /> Quay lại danh sách Nhân sự
+        <button onClick={onBack} className="flex items-center gap-2 text-xs font-bold text-slate-400 hover:text-[var(--text-main)] transition-colors">
+          <ArrowLeft size={16} /> QUAY LẠI
         </button>
         <div className="flex gap-2">
           {!editMode ? (
             <>
-              <button onClick={printPdf} className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-xl border border-[var(--border-color)] hover:border-blue-500/40 hover:bg-blue-500/5">
-                <Printer size={14} /> PDF
+              <button onClick={printPdf} className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold rounded-xl border border-[var(--border-color)] hover:border-red-500/30 hover:bg-red-500/5 text-slate-600 dark:text-slate-300 hover:text-red-500 dark:hover:text-red-400 transition-all shadow-sm">
+                <Printer size={14} className="text-red-500" /> PDF
               </button>
-              <button onClick={() => setEditMode(true)} className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-xl border border-blue-500/40 text-blue-500 hover:bg-blue-500/10">
+              <button onClick={() => setEditMode(true)} className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold rounded-xl border border-blue-500/40 text-blue-500 hover:bg-blue-500/10 transition-all shadow-sm">
                 <Edit2 size={14} /> Sửa
               </button>
               <DeleteButton
@@ -133,8 +133,8 @@ export default function EmployeeProfile({ recordId, onBack }) {
             </>
           ) : (
             <>
-              <button onClick={() => { setDirty({}); setEditMode(false); }} disabled={saving} className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-xl border border-[var(--border-color)] hover:bg-black/5"><X size={14} /> Huỷ</button>
-              <button onClick={handleSave} disabled={saving} className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-xl border border-green-500/40 text-green-600 hover:bg-green-500/10 disabled:opacity-40">
+              <button onClick={() => { setDirty({}); setEditMode(false); }} disabled={saving} className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold rounded-xl border border-[var(--border-color)] hover:bg-black/5"><X size={14} /> Huỷ</button>
+              <button onClick={handleSave} disabled={saving} className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold rounded-xl border border-green-500/40 text-green-600 hover:bg-green-500/10 disabled:opacity-40">
                 <Save size={14} /> {saving ? 'Đang lưu...' : 'Lưu'}
               </button>
             </>
@@ -143,15 +143,16 @@ export default function EmployeeProfile({ recordId, onBack }) {
       </div>
 
       {/* Header card */}
-      <div className="glass-card p-6">
+      <div className="glass-card p-6 shadow-sm hover:shadow-md transition-shadow duration-300">
         <div className="flex items-start gap-6 flex-wrap">
           {/* Avatar */}
           <div className="shrink-0">
             {photoUrl ? (
               <img src={photoUrl} alt={e.fullName} className="w-24 h-24 rounded-2xl object-cover border-2 border-white/10 shadow-lg" />
             ) : (
-              <div className="w-24 h-24 rounded-2xl bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center text-white text-3xl font-black shadow-lg shadow-blue-500/30">
-                {initialsOf(e.fullName)}
+              <div className="w-24 h-24 rounded-2xl bg-gradient-to-br from-blue-600 via-indigo-500 to-cyan-400 flex items-center justify-center text-white text-3xl font-black shadow-lg shadow-blue-500/30 relative overflow-hidden">
+                <div className="absolute inset-0 bg-white/10 transform -skew-x-12 translate-x-1/2" />
+                <span className="relative z-10">{initialsOf(e.fullName)}</span>
               </div>
             )}
           </div>
@@ -160,21 +161,21 @@ export default function EmployeeProfile({ recordId, onBack }) {
           <div className="flex-1 min-w-0">
             <div className="flex items-center justify-between gap-4 flex-wrap">
               <div>
-                <h2 className="text-2xl font-black text-[var(--text-main)]">{e.fullName ?? '(không tên)'}</h2>
-                <p className="text-sm text-[var(--text-muted)] mt-0.5">
+                <h2 className="text-2xl font-black text-[var(--text-main)] tracking-tight">{e.fullName ?? '(không tên)'}</h2>
+                <p className="text-xs text-[var(--text-muted)] font-semibold mt-1">
                   {e.position ?? '—'} · {DEPT_LABEL[e.department] ?? e.department ?? '—'}
                 </p>
-                <p className="text-[11px] text-slate-500 mt-1 font-mono">{e.employeeCode ?? '—'}</p>
+                <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1 font-mono font-bold uppercase tracking-wider">{e.employeeCode ?? '—'}</p>
               </div>
               {e.status && (
-                <span className={`px-3 py-1.5 rounded-xl text-[10px] font-bold uppercase tracking-wider ${STATUS_COLOR[e.status] ?? 'bg-slate-500/10'}`}>
+                <span className={`px-3 py-1 rounded-xl text-[10px] font-bold uppercase tracking-wider ${STATUS_COLOR[e.status] ?? 'bg-slate-500/10'}`}>
                   {STATUS_LABEL[e.status] ?? e.status}
                 </span>
               )}
             </div>
 
             {/* Mini-stats */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-5">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-5">
               <Stat label="Thâm niên" value={tenureStr ?? '—'} />
               <Stat label="Lương/tháng" value={e.salary ? `${(e.salary / 1_000_000).toFixed(1)} tr` : '—'} />
               <Stat label="Khen thưởng" value={numAwards} />
@@ -183,10 +184,10 @@ export default function EmployeeProfile({ recordId, onBack }) {
 
             {/* Quick contacts */}
             {(e.phone || e.email || e.telegramUserId) && (
-              <div className="flex flex-wrap gap-3 mt-5 text-xs text-slate-500">
-                {e.phone && <span className="inline-flex items-center gap-1.5"><Phone size={13} />{e.phone}</span>}
-                {e.email && <span className="inline-flex items-center gap-1.5"><Mail size={13} />{e.email}</span>}
-                {e.telegramUserId && <span className="inline-flex items-center gap-1.5"><MessageSquare size={13} />TG {e.telegramUserId}</span>}
+              <div className="flex flex-wrap gap-4 mt-5 text-xs text-slate-400 dark:text-slate-500 font-semibold">
+                {e.phone && <span className="inline-flex items-center gap-1.5"><Phone size={13} className="text-slate-400" />{e.phone}</span>}
+                {e.email && <span className="inline-flex items-center gap-1.5"><Mail size={13} className="text-slate-400" />{e.email}</span>}
+                {e.telegramUserId && <span className="inline-flex items-center gap-1.5"><MessageSquare size={13} className="text-slate-400" />TG {e.telegramUserId}</span>}
               </div>
             )}
           </div>
@@ -194,19 +195,19 @@ export default function EmployeeProfile({ recordId, onBack }) {
       </div>
 
       {/* Tabs */}
-      <div className="glass-card p-0 overflow-hidden">
-        <div className="flex border-b border-[var(--border-color)] overflow-x-auto no-scrollbar no-print">
+      <div className="glass-card p-0 overflow-hidden shadow-sm hover:shadow-md transition-shadow duration-300">
+        <div className="flex border-b border-[var(--border-color)] overflow-x-auto no-scrollbar no-print bg-slate-500/[0.015]">
           {TABS.map((t) => (
             <button
               key={t.id}
               onClick={() => setTab(t.id)}
-              className={`flex items-center gap-2 px-5 py-3 text-sm font-semibold transition-all whitespace-nowrap border-b-2 ${
+              className={`flex items-center gap-2 px-6 py-3.5 text-xs font-bold uppercase tracking-wider transition-all duration-200 whitespace-nowrap border-b-2 -mb-px ${
                 tab === t.id
-                  ? 'border-blue-500 text-blue-500'
-                  : 'border-transparent text-slate-500 hover:text-[var(--text-main)]'
+                  ? 'border-blue-500 text-blue-600 dark:text-blue-400 bg-blue-500/[0.02]'
+                  : 'border-transparent text-slate-400 hover:text-[var(--text-main)] hover:bg-black/[0.01] dark:hover:bg-white/[0.01]'
               }`}
             >
-              <t.icon size={15} /> {t.label}
+              <t.icon size={14} className={tab === t.id ? 'text-blue-500' : 'text-slate-400'} /> {t.label}
             </button>
           ))}
         </div>

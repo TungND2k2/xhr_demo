@@ -1,4 +1,5 @@
 import type { CollectionConfig } from "payload";
+import { autoDescribeMedia } from "../hooks/media/auto-describe";
 
 /**
  * Media — Payload built-in upload collection.
@@ -40,6 +41,12 @@ export const Media: CollectionConfig = {
     // text/* để AI export được CSV/MD/TXT, application/json cho JSON dump.
     mimeTypes: ["image/*", "application/pdf", "application/*", "text/*"],
   },
+  hooks: {
+    // Khi admin upload file qua web (drag-drop folder 300MB → nhiều file)
+    // → bot tự AI describe trong background. Hook fire-and-forget POST bot
+    // HTTP API, không block admin. Bot xử lý batch qua queue.
+    afterChange: [autoDescribeMedia],
+  },
   fields: [
     {
       // UI field thuần (không lưu DB) — render iframe khi file là PDF.
@@ -71,7 +78,8 @@ export const Media: CollectionConfig = {
       options: [
         { label: "🆔 Hộ chiếu / CCCD / Giấy tờ tuỳ thân", value: "id_doc" },
         { label: "🏥 Giấy khám sức khoẻ", value: "health_cert" },
-        { label: "📜 Hợp đồng / HĐ lao động", value: "contract" },
+        { label: "📑 Hợp đồng cung ứng (HĐCU)", value: "supply_contract" },
+        { label: "📜 HĐ lao động / HĐ khác", value: "contract" },
         { label: "🛂 Visa / COE / Giấy phép cư trú", value: "visa_doc" },
         { label: "✈️ Vé máy bay / Lịch trình", value: "flight" },
         { label: "💼 CV / Sơ yếu lý lịch", value: "cv" },
@@ -104,6 +112,17 @@ export const Media: CollectionConfig = {
         description:
           "Output thô của MarkItDown. Chỉ có với document; ảnh thì để trống.",
         readOnly: true,
+      },
+    },
+    {
+      name: "linkedRecords",
+      label: "🔗 Liên kết với record",
+      type: "relationship",
+      relationTo: ["workers", "orders", "supply-contracts", "partners", "employees", "contracts", "official-documents"],
+      hasMany: true,
+      admin: {
+        description:
+          "File này thuộc về record nào? Auto-sync khi 1 record reference file này (vd: Contract.coeFile = thisMedia → linkedRecords tự thêm Contract). Tool AI cũng fill được, admin có thể edit tay.",
       },
     },
     {

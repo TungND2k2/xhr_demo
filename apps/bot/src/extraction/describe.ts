@@ -17,6 +17,7 @@ import { logger } from "../utils/logger.js";
 export type MediaKind =
   | "id_doc"
   | "health_cert"
+  | "supply_contract"
   | "contract"
   | "visa_doc"
   | "flight"
@@ -36,7 +37,8 @@ const SYSTEM_DESCRIBE = `Bạn là agent phân loại + tóm tắt tài liệu H
 Nhiệm vụ: nhìn vào nội dung document hoặc ảnh, trả về JSON đúng schema:
 
 {
-  "kind": "id_doc" | "health_cert" | "contract" | "visa_doc" | "flight" | "cv" | "portrait" | "invoice" | "form" | "partner_doc" | "other",
+  "kind": "id_doc" | "health_cert" | "supply_contract" | "contract" | "visa_doc" | "flight" | "cv" | "portrait" | "invoice" | "form" | "partner_doc" | "other",
+  // supply_contract = HĐCU (TLG ↔ Nghiệp đoàn); contract = HĐLĐ hoặc HĐ khác.
   "description": string  // 4-8 câu tiếng Việt, dày đặc thông tin
 }
 

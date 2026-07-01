@@ -35,6 +35,12 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
+  // Preload Magika model (fire-and-forget — không block boot, lần đầu request
+  // sẽ đợi nếu chưa load xong).
+  void import("./extraction/file-validator.js").then(({ preloadMagika }) =>
+    preloadMagika().catch((e) => logger.warn("Boot", `preload Magika: ${e}`)),
+  );
+
   // HTTP server cho Payload hooks gọi vào (extract / verify).
   httpServer = startHttpServer();
 

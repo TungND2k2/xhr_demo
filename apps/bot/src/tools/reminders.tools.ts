@@ -140,6 +140,12 @@ trong system prompt — KHÔNG hỏi user mấy giờ.`,
       ),
     relatedOrderId: z.string().optional().describe("Liên kết đơn tuyển nếu có"),
     relatedWorkerId: z.string().optional().describe("Liên kết LĐ nếu có"),
+    emailRecipients: z
+      .array(z.string().email())
+      .optional()
+      .describe(
+        "Danh sách email được gửi ĐÚNG GIỜ reminder fire (ngoài bắn Telegram). Cần SMTP config + địa chỉ trong whitelist. Dùng khi user yêu cầu 'nhắc Telegram + gửi email cho X'.",
+      ),
   },
   async (args) => {
     if (args.recipientType === "chat" && !args.recipientChatId) {
@@ -178,6 +184,9 @@ trong system prompt — KHÔNG hỏi user mấy giờ.`,
       }
       if (args.relatedOrderId) body.relatedOrder = args.relatedOrderId;
       if (args.relatedWorkerId) body.relatedWorker = args.relatedWorkerId;
+      if (args.emailRecipients && args.emailRecipients.length > 0) {
+        body.emailRecipients = args.emailRecipients.map((email) => ({ email }));
+      }
 
       const created = await payload.request<{ doc: ReminderRow }>("/api/reminders", {
         method: "POST",

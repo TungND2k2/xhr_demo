@@ -17,10 +17,16 @@ import { runPipeline, type PipelineAttachment } from "../pipeline/pipeline.js";
 import { mdToTelegramHtml, splitMessage } from "./format.js";
 import { describeToolCall } from "./tool-labels.js";
 import { convertToMarkdown, MarkItDownError } from "../extraction/markitdown.js";
+import {
+  needsLegacyConvert,
+  convertLegacyOffice,
+  LegacyOfficeError,
+} from "../extraction/legacy-office.js";
 import { describeDocument, describeImage, describeScannedPdf } from "../extraction/describe.js";
 import { pdfToImages, PdfToImagesError, type PdfPageImage } from "../extraction/pdf-to-images.js";
 import { payload, PayloadError } from "../payload/client.js";
 import { syncOnIncomingMessage, lookupAgentForMessage } from "../payload/telegram-sync.js";
+import { validateFile } from "../extraction/file-validator.js";
 
 interface TgUser {
   id: number;
@@ -71,6 +77,10 @@ interface TgMessage {
   is_topic_message?: boolean;
   /** Khi event "topic được tạo" — bot có thể lấy tên topic từ đây. */
   forum_topic_created?: TgForumTopicCreated;
+  /** Telegram media album: khi user gửi 2-10 file cùng lúc, các message
+   *  chia sẻ chung media_group_id. Chỉ caption của message đầu có thật,
+   *  các message sau caption rỗng. */
+  media_group_id?: string;
   date: number;
 }
 interface TgUpdate { update_id: number; message?: TgMessage }
@@ -119,18 +129,26 @@ export class TelegramChannel {
   private botId: number | null = null;
   private botUsername: string | null = null;
 
-  /** Per-chatId conversation history — last MAX_HISTORY items rolling window.
-   *  In-memory; mất khi bot restart (chấp nhận được — user chat lại context). */
+  /** Per-(chatId + threadId) conversation history. KEY = `chatId:threadId`.
+   *  Mỗi topic forum giữ history riêng — tránh lẫn context giữa các topic
+   *  cùng group (vd topic Nhân sự, topic HĐCU cùng supergroup).
+   *  In-memory; mất khi bot restart. */
   private readonly chatHistory = new Map<
-    number,
+    string,
     Array<{ role: "user" | "assistant"; text: string; attachmentNote?: string }>
   >();
   private readonly MAX_HISTORY = 12;
 
+  private historyKey(chatId: number, threadId?: number): string {
+    return `${chatId}:${threadId ?? 0}`;
+  }
+
   /** Per-chatId serial chain — đảm bảo trong cùng 1 chat (đặc biệt group),
    *  các message được xử lý tuần tự để không có race khi đọc/ghi chatHistory.
    *  Chat khác nhau vẫn parallel theo QUEUE_CONCURRENCY. */
-  private readonly chatChains = new Map<number, Promise<void>>();
+  /** Per-(chatId+threadId) serial chain — 2 topic cùng group được xử lý
+   *  song song. Key string "chatId:threadId". */
+  private readonly chatChains = new Map<string, Promise<void>>();
 
   constructor(
     private readonly botToken: string,
@@ -140,7 +158,13 @@ export class TelegramChannel {
   }
 
   private get apiBase(): string {
-    return `https://api.telegram.org/bot${this.botToken}`;
+    const base = (this.config.TELEGRAM_API_BASE ?? "https://api.telegram.org").replace(/\/$/, "");
+    return `${base}/bot${this.botToken}`;
+  }
+
+  private get fileApiBase(): string {
+    const base = (this.config.TELEGRAM_API_BASE ?? "https://api.telegram.org").replace(/\/$/, "");
+    return `${base}/file/bot${this.botToken}`;
   }
 
   start(): void {
@@ -269,10 +293,76 @@ export class TelegramChannel {
       if (this.botId === null) await this.fetchBotIdentity();
 
       const addressed = this.parseGroupAddress(msg);
-      if (!addressed.match) continue;
+
+      // Media album: nếu message thuộc media_group_id đã match → cũng match.
+      const mgid = msg.media_group_id;
+      let mediaGroupMatched = false;
+      if (mgid && !addressed.match) {
+        if (this.matchedMediaGroups.has(mgid)) mediaGroupMatched = true;
+      }
+
+      // Burst buffer: khi user gửi 11-20 ảnh, Telegram chia 2 album, caption
+      // chỉ ở album cuối. Album đầu không có @mention → sẽ bị reject.
+      // Buffer 8s: nếu trong window có message addressed từ cùng user
+      // → flush buffer cũng coi là match.
+      const burstKey = msg.from
+        ? `${msg.chat.id}:${msg.message_thread_id ?? 0}:${msg.from.id}`
+        : null;
+      const hasAtt = !!(msg.photo?.length || msg.document);
+
+      if (!addressed.match && !mediaGroupMatched) {
+        if (burstKey && hasAtt) {
+          const existing = this.pendingRejectBuf.get(burstKey);
+          if (existing) clearTimeout(existing.timer);
+          const msgs = existing ? [...existing.msgs, msg] : [msg];
+          const timer = setTimeout(() => {
+            this.pendingRejectBuf.delete(burstKey);
+          }, 8_000);
+          this.pendingRejectBuf.set(burstKey, { msgs, timer });
+        }
+        continue;
+      }
+
+      // Matched: kiểm pendingRejectBuf để rescue album đầu (đã reject trước
+      // khi caption đến).
+      if (burstKey) {
+        const buf = this.pendingRejectBuf.get(burstKey);
+        if (buf) {
+          clearTimeout(buf.timer);
+          this.pendingRejectBuf.delete(burstKey);
+          logger.info(
+            "Telegram",
+            `[${msg.chat.id}] rescue ${buf.msgs.length} message bị reject trước (burst window)`,
+          );
+          for (const rescued of buf.msgs) {
+            this.handleMessage(rescued, undefined);
+          }
+        }
+      }
+      if (mgid && addressed.match) {
+        this.matchedMediaGroups.add(mgid);
+        // GC: giới hạn 200 entries để tránh leak (1 album thường <30s)
+        if (this.matchedMediaGroups.size > 200) {
+          const first = this.matchedMediaGroups.values().next().value;
+          if (first) this.matchedMediaGroups.delete(first);
+        }
+      }
+
       this.handleMessage(msg, addressed.cleanedText);
     }
   }
+
+  /** Cache media_group_id đã match ở message đầu album — các message sau
+   *  cùng group không có @mention nhưng vẫn cần handle. */
+  private readonly matchedMediaGroups = new Set<string>();
+
+  /** Buffer message attachment bị reject (không @mention), giữ 8s. Nếu
+   *  trong window có message addressed từ cùng user → rescue tất cả vào
+   *  handleMessage. Cover case: 20 ảnh = 2 album, caption chỉ ở album cuối. */
+  private readonly pendingRejectBuf = new Map<
+    string,
+    { msgs: TgMessage[]; timer: NodeJS.Timeout }
+  >();
 
   /**
    * Trong group, bot CHỈ trả lời khi:
@@ -340,15 +430,28 @@ export class TelegramChannel {
     return { match: true, cleanedText: cleaned };
   }
 
+  // Batch multi-file upload: khi user gửi nhiều file liên tiếp (Telegram
+  // gửi từng file thành 1 message), gom thành 1 batch để bot xử lý chung
+  // → AI thấy tất cả file cùng lúc thay vì gọi pipeline N lần.
+  //
+  // Key = `${chatId}:${threadId}` (mỗi topic forum batch riêng).
+  // Timer reset mỗi lần có message mới → đợi 5s yên lặng → flush.
+  private readonly BATCH_WINDOW_MS = 5_000;
+  private readonly pendingBatches = new Map<
+    string,
+    { msgs: TgMessage[]; timer: NodeJS.Timeout }
+  >();
+
+  private hasAttachment(msg: TgMessage): boolean {
+    return !!(msg.photo?.length || msg.document);
+  }
+
   private handleMessage(msg: TgMessage, overrideText?: string): void {
     if (!msg.from) return;
     const chatId = msg.chat.id;
     const text = (overrideText ?? msg.text ?? msg.caption ?? "").trim();
 
     // Auto-track Telegram identity (user + group + membership + topic).
-    // Fire-and-forget cho tracking (Tg users/groups). processMessage sau
-    // sẽ tự lookup TelegramTopic + agent (await, ~50-100ms) trước khi
-    // gọi pipeline để có agent context cho multi-agent routing.
     void syncOnIncomingMessage(msg.from, msg.chat, {
       message_thread_id: msg.message_thread_id,
       forum_topic_created: msg.forum_topic_created,
@@ -361,11 +464,30 @@ export class TelegramChannel {
       }
     });
 
+    // Batch attachments: nếu message có file, KHÔNG enqueue ngay; gom 5s
+    // rồi enqueue 1 lần cho tất cả file.
+    if (this.hasAttachment(msg)) {
+      const key = `${chatId}:${msg.message_thread_id ?? 0}`;
+      const existing = this.pendingBatches.get(key);
+      if (existing) clearTimeout(existing.timer);
+      const msgs = existing ? [...existing.msgs, msg] : [msg];
+      const timer = setTimeout(() => {
+        this.pendingBatches.delete(key);
+        this.enqueueBatchedAttachments(chatId, msgs, overrideText);
+      }, this.BATCH_WINDOW_MS);
+      this.pendingBatches.set(key, { msgs, timer });
+      if (msgs.length > 1) {
+        logger.info("Telegram", `[${chatId}] batching attachment ${msgs.length}/N (chờ thêm ${this.BATCH_WINDOW_MS}ms)`);
+      }
+      return;
+    }
+
+    // Message không có file → enqueue ngay
     const job: QueueJob = {
       id: newId(),
       priority: 1,
       enqueuedAt: Date.now(),
-      run: () => this.runOnChat(chatId, () => this.processMessage(chatId, text, msg)),
+      run: () => this.runOnChat(chatId, msg.message_thread_id, () => this.processMessage(chatId, text, msg)),
     };
 
     if (!this.queue.enqueue(job)) {
@@ -377,28 +499,88 @@ export class TelegramChannel {
     }
   }
 
+  /** Flush batch các message có attachment: gộp caption + chuyển batch sang pipeline. */
+  private enqueueBatchedAttachments(chatId: number, msgs: TgMessage[], overrideText?: string): void {
+    if (msgs.length === 0) return;
+
+    // Caption: lấy của msg cuối có caption non-empty (user thường gõ caption
+    // ở file cuối khi gửi loạt).
+    const captionMsg = [...msgs].reverse().find((m) => (m.caption ?? m.text)?.trim()) ?? msgs[0];
+    const caption = (overrideText ?? captionMsg.caption ?? captionMsg.text ?? "").trim();
+    const text =
+      msgs.length > 1
+        ? `${caption ? caption + "\n\n" : ""}[Đã gửi ${msgs.length} file đính kèm — phân tích từng cái hoặc tổng hợp tuỳ ngữ cảnh.]`
+        : caption;
+
+    if (msgs.length > 1) {
+      logger.info("Telegram", `[${chatId}] flush batch ${msgs.length} attachments`);
+    }
+
+    const primary = msgs[0]; // dùng làm context (chatId, threadId, from)
+    const job: QueueJob = {
+      id: newId(),
+      priority: 1,
+      enqueuedAt: Date.now(),
+      run: () => this.runOnChat(chatId, primary.message_thread_id, () => this.processMessage(chatId, text, primary, msgs)),
+    };
+    if (!this.queue.enqueue(job)) {
+      this.sendMessage(
+        chatId,
+        "Hệ thống đang bận, vui lòng thử lại sau giây lát.",
+        primary.message_thread_id,
+      ).catch(() => {});
+    }
+  }
+
   /** GET file_path qua getFile + tải bytes. */
   private async downloadTelegramFile(
     fileId: string,
-  ): Promise<{ buffer: Buffer; filePath: string } | null> {
+  ): Promise<{ buffer: Buffer; filePath: string; reason?: string } | null> {
     try {
       const r1 = await fetch(`${this.apiBase}/getFile?file_id=${encodeURIComponent(fileId)}`, {
         signal: AbortSignal.timeout(15_000),
       });
-      const j1 = (await r1.json()) as { ok: boolean; result?: { file_path: string } };
+      const j1 = (await r1.json()) as {
+        ok: boolean;
+        result?: { file_path: string };
+        error_code?: number;
+        description?: string;
+      };
       if (!j1.ok || !j1.result?.file_path) {
-        logger.warn("Telegram", `getFile failed for ${fileId}`);
+        const desc = j1.description ?? "unknown";
+        logger.warn("Telegram", `getFile failed for ${fileId}: ${desc}`);
+        // Telegram Bot API cloud cap download tại 20MB hard limit
+        if (/too big/i.test(desc)) {
+          return { buffer: Buffer.alloc(0), filePath: "", reason: "file_too_big" };
+        }
         return null;
       }
       const filePath = j1.result.file_path;
-      const r2 = await fetch(`https://api.telegram.org/file/bot${this.botToken}/${filePath}`, {
-        signal: AbortSignal.timeout(60_000),
-      });
-      if (!r2.ok) {
-        logger.warn("Telegram", `download ${filePath} HTTP ${r2.status}`);
-        return null;
+      // Local Bot API Server trả absolute path (vd /var/lib/telegram-bot-api/...)
+      // Cloud trả relative path. Detect + xử lý.
+      let downloadUrl: string;
+      if (filePath.startsWith("/")) {
+        // Local server: file đã save sẵn trên disk
+        downloadUrl = `file://${filePath}`;
+      } else {
+        downloadUrl = `${this.fileApiBase}/${filePath}`;
       }
-      const buf = Buffer.from(await r2.arrayBuffer());
+
+      let buf: Buffer;
+      if (downloadUrl.startsWith("file://")) {
+        // Read từ disk (local Bot API Server)
+        const fs = await import("node:fs/promises");
+        buf = await fs.readFile(filePath);
+      } else {
+        const r2 = await fetch(downloadUrl, {
+          signal: AbortSignal.timeout(120_000),
+        });
+        if (!r2.ok) {
+          logger.warn("Telegram", `download ${filePath} HTTP ${r2.status}`);
+          return null;
+        }
+        buf = Buffer.from(await r2.arrayBuffer());
+      }
       return { buffer: buf, filePath };
     } catch (err) {
       logger.warn("Telegram", `downloadTelegramFile threw: ${err}`);
@@ -424,13 +606,56 @@ export class TelegramChannel {
       const d = msg.document;
       const name = d.file_name ?? `${d.file_id}.bin`;
       const mime = d.mime_type ?? inferMimeFromName(name) ?? "application/octet-stream";
+
+      // Pre-check size từ message metadata — tránh gọi getFile vô ích nếu file quá lớn.
+      // Cap cứng: 100MB (tổng giới hạn của bot, dù dùng cloud hay local server).
+      // Cap mềm cloud: 20MB (Telegram cloud Bot API). >20MB cần local server.
+      const sizeMb = (d.file_size ?? 0) / (1024 * 1024);
+      const HARD_LIMIT_MB = 100;
+      const CLOUD_LIMIT_MB = 20;
+      const isLocalServer = this.apiBase.includes("localhost") || this.apiBase.includes("127.0.0.1");
+      if (sizeMb > HARD_LIMIT_MB) {
+        onStatus(`⚠️ Không upload được — file **${name}** ${sizeMb.toFixed(1)}MB vượt giới hạn 100MB.`);
+        return out;
+      }
+      if (!isLocalServer && sizeMb > CLOUD_LIMIT_MB) {
+        onStatus(
+          `⚠️ Không upload được — file **${name}** ${sizeMb.toFixed(1)}MB vượt 20MB (giới hạn Telegram cloud).\n` +
+          `Vui lòng upload qua portal /admin/collections/media (kéo thả file, không giới hạn).`,
+        );
+        return out;
+      }
+
       onStatus(`📥 Tải tệp ${name}...`);
       const dl = await this.downloadTelegramFile(d.file_id);
       if (!dl) {
         onStatus(`⚠️ Không tải được tệp ${name}`);
         return out;
       }
+      if (dl.reason === "file_too_big") {
+        onStatus(
+          `⚠️ Không upload được — file **${name}** vượt giới hạn server hiện tại. ` +
+          `Vui lòng upload qua portal /admin/collections/media.`,
+        );
+        return out;
+      }
       logger.info("Telegram", `Downloaded ${name} (${(dl.buffer.length / 1024).toFixed(1)}KB)`);
+
+      // Magika file type sniff — bảo vệ pipeline khỏi file giả mạo
+      // (.exe/.scr đổi đuôi .pdf, script độc, executable embed trong ảnh...)
+      const validation = await validateFile(dl.buffer, name);
+      if (!validation.allowed) {
+        onStatus(`🛑 ${name}: ${validation.reason}`);
+        logger.warn(
+          "Telegram",
+          `Reject ${name}: claimed=${mime} detected=${validation.detectedLabel} score=${validation.score.toFixed(2)} — ${validation.reason}`,
+        );
+        return out;
+      }
+      logger.debug(
+        "Telegram",
+        `Magika OK ${name}: ${validation.detectedLabel} (${(validation.score * 100).toFixed(0)}%)`,
+      );
 
       // Nếu document thực ra là ảnh (PNG/JPG) → đẩy qua nhánh vision
       // (MarkItDown sẽ trả 0 chars vì không OCR mặc định, AI cần "nhìn" ảnh).
@@ -495,6 +720,28 @@ export class TelegramChannel {
         onStatus(`⚠️ Lưu media thất bại (${reason}) — vẫn tiếp tục đọc nội dung`);
       }
 
+      // Legacy MS Office (.doc / .xls / .ppt / .rtf / .wps / .odt...) →
+      // MarkItDown không đọc được. Pre-convert sang .docx/.xlsx/.pptx bằng
+      // LibreOffice headless trước khi gửi sang MarkItDown.
+      let extractBuf: Buffer = dl.buffer;
+      let extractName: string = name;
+      if (needsLegacyConvert(name)) {
+        onStatus(`🔄 Chuyển ${name} từ định dạng Office cũ → .docx ...`);
+        try {
+          const conv = await convertLegacyOffice(dl.buffer, name);
+          extractBuf = conv.buffer;
+          extractName = conv.filename;
+          logger.info(
+            "Telegram",
+            `LegacyOffice ${name} → ${conv.filename} (${conv.buffer.length} bytes)`,
+          );
+        } catch (err) {
+          const reason = err instanceof LegacyOfficeError ? err.message : String(err);
+          logger.warn("Telegram", `LegacyOffice convert failed: ${reason}`);
+          // Để fallback xuống MarkItDown thử (sẽ fail, hiển thị friendly msg)
+        }
+      }
+
       // MarkItDown — extract text from document. Nếu PDF scan (không có
       // text layer) thì sẽ trả empty → fallback OCR qua Claude vision bằng
       // cách convert PDF pages → PNG → push như image attachment.
@@ -503,8 +750,8 @@ export class TelegramChannel {
       let scannedPdfPages: PdfPageImage[] = [];
       try {
         onStatus(`🔍 Đọc nội dung qua MarkItDown...`);
-        markdown = await convertToMarkdown(dl.buffer, name);
-        logger.info("Telegram", `MarkItDown ${name} → ${markdown.length} chars`);
+        markdown = await convertToMarkdown(extractBuf, extractName);
+        logger.info("Telegram", `MarkItDown ${extractName} → ${markdown.length} chars`);
 
         if (markdown.trim().length < 50 && mime === "application/pdf") {
           onStatus(`👁 PDF không có text — OCR qua Claude vision...`);
@@ -532,7 +779,27 @@ export class TelegramChannel {
       } catch (err) {
         const reason = err instanceof MarkItDownError ? err.message : String(err);
         logger.warn("Telegram", `MarkItDown failed: ${reason}`);
-        onStatus(`⚠️ Không đọc được nội dung tệp (${reason})`);
+        const lower = name.toLowerCase();
+        const isLegacyOffice =
+          lower.endsWith(".doc") ||
+          lower.endsWith(".xls") ||
+          lower.endsWith(".ppt") ||
+          lower.endsWith(".wps") ||
+          lower.endsWith(".rtf");
+        if (isLegacyOffice) {
+          onStatus(
+            `⚠️ File ${name} đang ở định dạng cũ (Word/Excel 97-2003). ` +
+            `Em chưa đọc trực tiếp được — anh/chị mở file, "Save As" thành ` +
+            `**.docx / .xlsx / .pptx** (hoặc xuất PDF) rồi gửi lại giúp em ạ. ` +
+            `File đã được lưu vào kho media, có thể tải lại trong admin.`,
+          );
+        } else {
+          onStatus(
+            `⚠️ Em không đọc được nội dung ${name} (định dạng chưa hỗ trợ). ` +
+            `File đã được lưu, nhưng AI search/extract sẽ không tìm được nội dung bên trong. ` +
+            `Anh/chị thử gửi lại dạng .docx, .pdf, .xlsx, hoặc ảnh chụp giúp em.`,
+          );
+        }
       }
 
       // Background tasks — không chặn pipeline trả lời user.
@@ -633,7 +900,23 @@ export class TelegramChannel {
         onStatus(`⚠️ Không tải được ảnh`);
         return out;
       }
+      if (dl.reason === "file_too_big") {
+        onStatus(`⚠️ Ảnh vượt 20MB — vui lòng nén bớt hoặc upload qua portal`);
+        return out;
+      }
       logger.info("Telegram", `Downloaded photo ${name} (${(dl.buffer.length / 1024).toFixed(1)}KB)`);
+
+      // Magika sniff — Telegram nén ảnh nên ít rủi ro hơn document, nhưng vẫn
+      // cảnh giác với polyglot file (ảnh chứa exploit / script).
+      const validation = await validateFile(dl.buffer, name);
+      if (!validation.allowed) {
+        onStatus(`🛑 ${name}: ${validation.reason}`);
+        logger.warn(
+          "Telegram",
+          `Reject photo ${name}: detected=${validation.detectedLabel} — ${validation.reason}`,
+        );
+        return out;
+      }
 
       // Telegram thường trả jpeg, nhưng có thể là png nếu user gửi qua "send as file"
       const ext = dl.filePath.split(".").pop()?.toLowerCase();
@@ -694,6 +977,10 @@ export class TelegramChannel {
     chatId: number,
     text: string,
     msg: TgMessage,
+    /** Multi-file batch: nếu set, resolve attachments từ TẤT CẢ messages
+     *  thay vì chỉ msg primary. Caller (enqueueBatchedAttachments) gom các
+     *  message có file gửi liên tiếp trong 5s thành 1 batch. */
+    batchMsgs?: TgMessage[],
   ): Promise<void> {
     // Quick commands — không qua pipeline. Pass thread_id để reply trong
     // cùng topic Forum.
@@ -787,7 +1074,16 @@ export class TelegramChannel {
       refreshTyping();
       queueEdit();
     };
-    const attachments = await this.resolveAttachments(msg, onStatus);
+    // Nếu batch (multi-file): resolve TỪNG msg → gộp attachments.
+    let attachments: PipelineAttachment[] = [];
+    const msgsToResolve = batchMsgs && batchMsgs.length > 0 ? batchMsgs : [msg];
+    if (msgsToResolve.length > 1) {
+      onStatus(`📥 Nhận ${msgsToResolve.length} file — đang xử lý song song...`);
+    }
+    for (const m of msgsToResolve) {
+      const part = await this.resolveAttachments(m, onStatus);
+      attachments.push(...part);
+    }
 
     // Multi-agent: lookup agent gán cho topic này. Nếu trả null → pipeline
     // dùng SYSTEM_PROMPT mặc định + full tool set (behavior cũ).
@@ -801,8 +1097,10 @@ export class TelegramChannel {
       .map((a) => `${a.type === "image" ? "🖼" : "📄"} ${a.name}`)
       .join(", ");
 
-    // Lấy history của chat này
-    const history = this.chatHistory.get(chatId) ?? [];
+    // Lấy history của (chat, topic) này — tách theo thread để tránh lẫn
+    // context giữa các topic forum cùng group.
+    const histKey = this.historyKey(chatId, threadId);
+    const history = this.chatHistory.get(histKey) ?? [];
 
     // Heartbeat khi pipeline đang chạy — Claude vision/reasoning có thể mất
     // 10-30s trước khi emit tool/text đầu tiên. Update line cuối với elapsed
@@ -867,17 +1165,31 @@ export class TelegramChannel {
     if (history.length > this.MAX_HISTORY) {
       history.splice(0, history.length - this.MAX_HISTORY);
     }
-    this.chatHistory.set(chatId, history);
+    this.chatHistory.set(histKey, history);
 
     if (pendingEdit) clearTimeout(pendingEdit);
     if (statusMsgId !== null) await this.deleteMessage(chatId, statusMsgId);
-    await this.sendMessage(chatId, result.reply, threadId);
+
+    // Khi reply trong topic forum và có agent gán cho topic → prepend header
+    // `**<displayName>**` để user biết agent nào đang trả lời. DM / chat
+    // thường không cần (chỉ có 1 "voice").
+    const finalReply = agent?.displayName && threadId !== undefined
+      ? `**${agent.displayName}**\n\n${result.reply}`
+      : result.reply;
+    await this.sendMessage(chatId, finalReply, threadId);
   }
 
   /** Cho user clear context khi cần (vd: /reset). Không expose qua Telegram
    *  command yet — chỉ programmatic. */
-  clearChatHistory(chatId: number): void {
-    this.chatHistory.delete(chatId);
+  clearChatHistory(chatId: number, threadId?: number): void {
+    if (threadId === undefined) {
+      // Clear all topics in chat
+      for (const k of Array.from(this.chatHistory.keys())) {
+        if (k.startsWith(`${chatId}:`)) this.chatHistory.delete(k);
+      }
+    } else {
+      this.chatHistory.delete(this.historyKey(chatId, threadId));
+    }
   }
 
   /**
@@ -889,16 +1201,20 @@ export class TelegramChannel {
    *  - DM: cùng chatId = cùng 1 user → không ai spam vô nghĩa
    *  - Group: tuần tự là điều ta muốn, để history & context đúng thứ tự
    */
-  private async runOnChat(chatId: number, fn: () => Promise<void>): Promise<void> {
-    const prev = this.chatChains.get(chatId) ?? Promise.resolve();
+  private async runOnChat(
+    chatId: number,
+    threadId: number | undefined,
+    fn: () => Promise<void>,
+  ): Promise<void> {
+    const key = `${chatId}:${threadId ?? 0}`;
+    const prev = this.chatChains.get(key) ?? Promise.resolve();
     const next = prev.catch(() => {}).then(fn);
-    this.chatChains.set(chatId, next);
+    this.chatChains.set(key, next);
     try {
       await next;
     } finally {
-      // Cleanup khi chain rỗng — tránh leak Map theo thời gian
-      if (this.chatChains.get(chatId) === next) {
-        this.chatChains.delete(chatId);
+      if (this.chatChains.get(key) === next) {
+        this.chatChains.delete(key);
       }
     }
   }

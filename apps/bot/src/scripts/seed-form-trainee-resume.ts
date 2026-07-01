@@ -178,11 +178,6 @@ const FIELDS: FormField[] = [
   ta("address", "Địa chỉ thường trú", true, 100),
   txt("personalPhone", "Số ĐT cá nhân", true, 50),
 
-  // ═══ VĂN PHÒNG PHỤ TRÁCH ═══
-  msg("🏢 Văn phòng phụ trách"),
-  // Options trống — FormClient sẽ tự load từ /api/offices?active=true.
-  sel("office", "Văn phòng TLG đang phụ trách anh/chị", [], true, 50),
-
   // ═══ KINH NGHIỆM LÀM VIỆC ═══
   msg("💼 Kinh nghiệm làm việc"),
   ta("workHistory",
@@ -230,6 +225,11 @@ const FIELDS: FormField[] = [
   msg("🏢 Thông tin nội bộ TLG (cán bộ điền)"),
   txt("managerName", "Cán bộ quản lý", false, 50),
   txt("managerPhone", "Số ĐT cán bộ quản lý", false, 50),
+
+  // ═══ VĂN PHÒNG PHỤ TRÁCH (chuyển xuống cuối theo yêu cầu HCNS 01/07) ═══
+  msg("🏢 Văn phòng phụ trách"),
+  // Options trống — FormClient sẽ tự load từ /api/offices?active=true.
+  sel("office", "Văn phòng TLG đang phụ trách anh/chị", [], true, 50),
 ];
 
 interface FormExisting {

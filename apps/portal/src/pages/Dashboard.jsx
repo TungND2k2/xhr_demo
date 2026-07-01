@@ -232,16 +232,16 @@ export default function Dashboard() {
       {/* Header + time range */}
       <div className="flex items-end justify-between flex-wrap gap-3">
         <div>
-          <h2 className="text-3xl font-black text-[var(--text-main)] tracking-tight">Trung tâm Điều hành XKLĐ — Thịnh Long Group</h2>
-          <p className="text-[var(--text-muted)] text-sm">Lao động Nhật Bản, đơn YCTD, HĐ Cung ứng và công văn.</p>
+          <h2 className="text-3xl font-black bg-gradient-to-r from-blue-600 to-indigo-600 dark:from-blue-400 dark:to-indigo-400 bg-clip-text text-transparent tracking-tight">Trung tâm Điều hành XKLĐ — Thịnh Long Group</h2>
+          <p className="text-[var(--text-muted)] text-sm font-medium mt-1">Lao động Nhật Bản, đơn YCTD, HĐ Cung ứng và công văn.</p>
         </div>
-        <div className="flex items-center gap-1 p-1 rounded-xl border border-[var(--border-color)] bg-[var(--sidebar-bg)] no-print">
+        <div className="flex items-center gap-1 p-1 rounded-xl border border-[var(--border-color)] bg-[var(--sidebar-bg)] no-print shadow-sm">
           {RANGE_OPTIONS.map((opt) => (
             <button
               key={opt.id}
               onClick={() => setRange(opt.id)}
               className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                range === opt.id ? 'bg-blue-500 text-white shadow' : 'text-slate-500 hover:text-[var(--text-main)]'
+                range === opt.id ? 'bg-blue-500 text-white shadow-sm' : 'text-slate-400 hover:text-[var(--text-main)]'
               }`}
             >{opt.label}</button>
           ))}
@@ -250,71 +250,120 @@ export default function Dashboard() {
 
       {/* KPI: Current state */}
       <div>
-        <div className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-2">Hiện trạng</div>
+        <div className="flex items-center gap-2 mb-4">
+          <div className="w-1 h-4 rounded-full bg-gradient-to-b from-cyan-500 to-blue-600" />
+          <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500">Hiện trạng</span>
+        </div>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          {KPIS.map((kpi, i) => (
-            <div key={i} className="glass-card p-5">
-              <div className={`p-2.5 rounded-xl inline-flex mb-4 ${
-                kpi.color === 'cyan' ? 'bg-cyan-500/10 text-cyan-500'
-                : kpi.color === 'purple' ? 'bg-purple-500/10 text-purple-500'
-                : 'bg-red-500/10 text-red-500'
-              }`}><kpi.icon size={18} /></div>
-              <p className="text-[9px] font-bold text-slate-500 uppercase tracking-[0.2em] mb-1">{kpi.label}</p>
-              <h3 className="text-3xl font-black text-[var(--text-main)]">{loading ? '…' : (kpi.value ?? '—')}</h3>
-            </div>
-          ))}
+          {KPIS.map((kpi, i) => {
+            const gradients = [
+              'from-cyan-600 via-blue-600 to-blue-700',
+              'from-blue-600 via-indigo-600 to-purple-700',
+              'from-purple-600 via-violet-600 to-indigo-700',
+              'from-red-600 via-rose-600 to-pink-700',
+            ];
+            const glows = [
+              'shadow-cyan-500/25',
+              'shadow-blue-500/25',
+              'shadow-purple-500/25',
+              'shadow-red-500/25',
+            ];
+            return (
+              <div
+                key={i}
+                className={`relative overflow-hidden rounded-2xl p-6 text-white shadow-xl ${glows[i]} hover:scale-[1.02] transition-transform duration-300`}
+                style={{ background: `linear-gradient(135deg, var(--tw-gradient-stops))`, backgroundImage: `linear-gradient(135deg, ${[
+                  ['#0891b2','#2563eb'],['#2563eb','#7c3aed'],['#7c3aed','#4f46e5'],['#dc2626','#db2777']
+                ][i].join(',')})` }}
+              >
+                {/* Decorative circles */}
+                <div className="absolute -top-6 -right-6 w-28 h-28 rounded-full opacity-10 bg-white" />
+                <div className="absolute -bottom-8 -left-4 w-24 h-24 rounded-full opacity-10 bg-white" />
+                <div className="relative z-10">
+                  <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center mb-5 backdrop-blur-sm">
+                    <kpi.icon size={20} className="text-white" />
+                  </div>
+                  <p className="text-white/70 text-[10px] font-bold uppercase tracking-[0.2em] mb-1">{kpi.label}</p>
+                  <h3 className="text-4xl font-black tracking-tight">{loading ? '…' : (kpi.value ?? '—')}</h3>
+                </div>
+              </div>
+            );
+          })}
         </div>
       </div>
 
       {/* KPI: Period activity */}
       <div>
-        <div className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-2 flex items-center gap-2">
-          <Sparkles size={11} />Hoạt động {RANGE_OPTIONS.find((r) => r.id === range)?.label.toLowerCase()} qua
+        <div className="flex items-center gap-2 mb-4">
+          <div className="w-1 h-4 rounded-full bg-gradient-to-b from-blue-500 to-indigo-600" />
+          <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500 flex items-center gap-2">
+            <Sparkles size={11} className="text-blue-500" />
+            Hoạt động {RANGE_OPTIONS.find((r) => r.id === range)?.label.toLowerCase()} qua
+          </span>
         </div>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          {PERIOD_KPIS.map((kpi, i) => (
-            <div key={i} className="glass-card p-4 flex items-center gap-3">
-              <div className={`p-2 rounded-xl ${
-                kpi.color === 'blue' ? 'bg-blue-500/10 text-blue-500'
-                : kpi.color === 'green' ? 'bg-green-500/10 text-green-500'
-                : 'bg-purple-500/10 text-purple-500'
-              }`}><kpi.icon size={16} /></div>
-              <div>
-                <p className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">{kpi.label}</p>
-                <h3 className="text-xl font-black text-[var(--text-main)]">+{loading ? '…' : (kpi.value ?? 0)}</h3>
+          {PERIOD_KPIS.map((kpi, i) => {
+            const colors = [
+              { border: 'border-blue-500/30', bg: 'bg-blue-500/8 dark:bg-blue-500/10', text: 'text-blue-600 dark:text-blue-400', icon: 'bg-blue-500/15 text-blue-500' },
+              { border: 'border-indigo-500/30', bg: 'bg-indigo-500/8 dark:bg-indigo-500/10', text: 'text-indigo-600 dark:text-indigo-400', icon: 'bg-indigo-500/15 text-indigo-500' },
+              { border: 'border-green-500/30', bg: 'bg-green-500/8 dark:bg-green-500/10', text: 'text-green-600 dark:text-green-400', icon: 'bg-green-500/15 text-green-500' },
+              { border: 'border-purple-500/30', bg: 'bg-purple-500/8 dark:bg-purple-500/10', text: 'text-purple-600 dark:text-purple-400', icon: 'bg-purple-500/15 text-purple-500' },
+            ][i];
+            return (
+              <div key={i} className={`glass-card p-5 border-2 ${colors.border} hover:shadow-lg transition-all duration-300 hover:-translate-y-0.5`}>
+                <div className={`w-9 h-9 rounded-xl flex items-center justify-center mb-4 ${colors.icon}`}>
+                  <kpi.icon size={17} />
+                </div>
+                <p className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-0.5">{kpi.label}</p>
+                <h3 className={`text-2xl font-black tracking-tight ${colors.text}`}>+{loading ? '…' : (kpi.value ?? 0)}</h3>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
 
       {/* Alerts */}
       <div>
-        <div className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-2 flex items-center gap-2">
-          <AlertCircle size={11} />Cần xử lý ngay
+        <div className="flex items-center gap-2 mb-4">
+          <div className="w-1 h-4 rounded-full bg-gradient-to-b from-red-500 to-orange-600" />
+          <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500 flex items-center gap-2">
+            <AlertCircle size={11} className="text-red-500" />Cần xử lý ngay
+          </span>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           {ALERTS.map((a, i) => {
             const dangerous = (a.value ?? 0) > 0;
             return (
-              <button key={i} onClick={a.go}
-                className={`glass-card p-4 text-left group hover:scale-[1.01] transition-all ${
-                  dangerous && a.color === 'red' ? 'border-red-500/30 bg-red-500/5'
-                  : dangerous && a.color === 'amber' ? 'border-amber-500/30 bg-amber-500/5'
-                  : ''
-                }`}>
-                <div className="flex items-center justify-between mb-2">
-                  <a.icon size={16} className={
-                    dangerous && a.color === 'red' ? 'text-red-500'
-                    : dangerous && a.color === 'amber' ? 'text-amber-500'
-                    : 'text-slate-500'} />
-                  <ArrowRight size={12} className="text-slate-500 group-hover:translate-x-1 transition-transform" />
+              <button
+                key={i}
+                onClick={a.go}
+                className={`glass-card p-5 text-left group hover:scale-[1.02] transition-all duration-300 relative overflow-hidden ${
+                  dangerous && a.color === 'red'
+                    ? 'border-red-500/40 bg-gradient-to-br from-red-500/10 to-red-500/5 shadow-lg shadow-red-500/10'
+                    : dangerous && a.color === 'amber'
+                    ? 'border-amber-500/40 bg-gradient-to-br from-amber-500/10 to-amber-500/5 shadow-lg shadow-amber-500/10'
+                    : 'hover:border-slate-400/30'
+                }`}
+              >
+                {dangerous && (
+                  <div className={`absolute top-0 left-0 right-0 h-0.5 ${a.color === 'red' ? 'bg-gradient-to-r from-red-500 to-pink-500' : 'bg-gradient-to-r from-amber-500 to-orange-500'}`} />
+                )}
+                <div className="flex items-center justify-between mb-4">
+                  <div className={`p-2 rounded-xl ${
+                    dangerous && a.color === 'red' ? 'bg-red-500/15 text-red-500'
+                    : dangerous && a.color === 'amber' ? 'bg-amber-500/15 text-amber-500'
+                    : 'bg-slate-500/10 text-slate-400'
+                  }`}>
+                    <a.icon size={16} />
+                  </div>
+                  <ArrowRight size={13} className="text-slate-400 group-hover:translate-x-1 transition-transform opacity-60" />
                 </div>
-                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">{a.label}</p>
-                <p className={`text-2xl font-black ${
-                  dangerous && a.color === 'red' ? 'text-red-500'
-                  : dangerous && a.color === 'amber' ? 'text-amber-500'
-                  : 'text-[var(--text-main)]'}`}>{loading ? '…' : (a.value ?? 0)}</p>
+                <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1.5">{a.label}</p>
+                <p className={`text-3xl font-black tracking-tight ${
+                  dangerous && a.color === 'red' ? 'text-red-500 dark:text-red-400'
+                  : dangerous && a.color === 'amber' ? 'text-amber-500 dark:text-amber-400'
+                  : 'text-[var(--text-main)]'
+                }`}>{loading ? '…' : (a.value ?? 0)}</p>
               </button>
             );
           })}
@@ -398,14 +447,14 @@ export default function Dashboard() {
             return (
               <div key={s.code} className="flex items-center gap-3">
                 <div className="w-24 text-xs font-bold text-slate-500">{s.label}</div>
-                <div className="flex-1 h-9 bg-black/5 dark:bg-white/5 rounded-lg overflow-hidden relative">
+                <div className="flex-1 h-9 bg-black/5 dark:bg-white/5 rounded-xl overflow-hidden relative border border-[var(--border-color)]">
                   <motion.div
                     initial={{ width: 0 }}
                     animate={{ width: `${s.pct}%` }}
                     transition={{ duration: 0.8, ease: 'easeOut', delay: i * 0.05 }}
-                    className="h-full bg-gradient-to-r from-cyan-500 to-blue-500 rounded-lg flex items-center justify-end pr-3"
+                    className="h-full bg-gradient-to-r from-cyan-500 to-blue-500 rounded-xl flex items-center justify-end pr-3 relative overflow-hidden"
                   >
-                    <span className="text-white text-xs font-bold">{s.sharePct > 5 ? `${s.sharePct}%` : ''}</span>
+                    <span className="text-white text-xs font-black z-10 drop-shadow-[0_1px_2px_rgba(0,0,0,0.3)]">{s.sharePct > 5 ? `${s.sharePct}%` : ''}</span>
                   </motion.div>
                 </div>
                 <div className="w-16 text-right text-sm font-bold text-[var(--text-main)]">{s.count}</div>
@@ -506,7 +555,7 @@ function Donut({ data, size = 130 }) {
   if (total === 0) return null;
   const cx = size / 2, cy = size / 2;
   const outerR = size / 2 - 2;
-  const innerR = outerR * 0.6;
+  const innerR = outerR * 0.68;
   let acc = 0;
   const arcs = data.map((d, i) => {
     const sA = (acc / total) * Math.PI * 2 - Math.PI / 2;
@@ -515,10 +564,18 @@ function Donut({ data, size = 130 }) {
     return { d, path: arcPath(cx, cy, outerR, innerR, sA, eA), key: i };
   });
   return (
-    <svg width={size} height={size} className="shrink-0">
-      {arcs.map((a) => <path key={a.key} d={a.path} fill={a.d.color} />)}
-      <circle cx={cx} cy={cy} r={innerR} fill="var(--sidebar-bg)" />
-      <text x={cx} y={cy + 5} textAnchor="middle" fontSize="18" fontWeight="900" fill="currentColor">{total}</text>
+    <svg width={size} height={size} className="shrink-0 filter drop-shadow-[0_4px_6px_rgba(0,0,0,0.05)]">
+      {arcs.map((a) => (
+        <path
+          key={a.key}
+          d={a.path}
+          fill={a.d.color}
+          className="transition-all duration-300 hover:opacity-90 cursor-pointer"
+        />
+      ))}
+      <circle cx={cx} cy={cy} r={innerR} fill="var(--sidebar-bg)" className="transition-colors duration-500" />
+      <text x={cx} y={cy - 2} textAnchor="middle" fontSize="22" fontWeight="900" fill="currentColor" className="tracking-tight">{total}</text>
+      <text x={cx} y={cy + 13} textAnchor="middle" fontSize="9" fontWeight="700" fill="var(--text-muted)" className="uppercase tracking-widest">Tổng</text>
     </svg>
   );
 }
