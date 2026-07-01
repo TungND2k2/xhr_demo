@@ -4,9 +4,8 @@ import { motion } from 'framer-motion';
 import {
   Newspaper, Plus, Search, X, Filter, User, Calendar,
 } from 'lucide-react';
-import { listDocs, createDoc } from '../api/payload';
+import { listDocs } from '../api/payload';
 import { fmtDate } from '../lib/workers-labels';
-import FormModal from '../components/FormModal';
 
 const DEPT_LABEL = {
   all: '🏢 Toàn công ty',
@@ -30,20 +29,6 @@ const STATUS_META = {
   archived: { label: '🗄 Lưu trữ', chip: 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30' },
 };
 
-const CREATE_FIELDS = [
-  { name: 'title', label: 'Tiêu đề', type: 'text', required: true, width: 'full', placeholder: 'vd: Chào mừng nhân sự mới tháng 7' },
-  { name: 'department', label: 'Phòng ban', type: 'select', required: true, width: 'half',
-    options: Object.entries(DEPT_LABEL).map(([v, l]) => ({ value: v, label: l })) },
-  { name: 'status', label: 'Trạng thái', type: 'select', required: true, width: 'half', defaultValue: 'draft',
-    options: [
-      { value: 'draft', label: '📝 Lưu nháp' },
-      { value: 'published', label: '✅ Đăng ngay' },
-    ] },
-  { name: 'excerpt', label: 'Tóm tắt', type: 'textarea', width: 'full', rows: 2, placeholder: '1-2 câu ngắn — hiện dưới title ở list' },
-  { name: 'content', label: 'Nội dung', type: 'textarea', required: true, width: 'full', rows: 10,
-    help: 'Hỗ trợ markdown: **đậm**, *nghiêng*, ## Đề mục, - danh sách...' },
-];
-
 export default function BlogListPage() {
   const navigate = useNavigate();
   const [posts, setPosts] = useState([]);
@@ -51,8 +36,6 @@ export default function BlogListPage() {
   const [search, setSearch] = useState('');
   const [deptFilter, setDeptFilter] = useState(null);
   const [statusFilter, setStatusFilter] = useState('published');
-  const [createOpen, setCreateOpen] = useState(false);
-  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     let cancel = false;
@@ -66,7 +49,7 @@ export default function BlogListPage() {
       setLoading(false);
     });
     return () => { cancel = true; };
-  }, [statusFilter, deptFilter, reloadKey]);
+  }, [statusFilter, deptFilter]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -87,12 +70,6 @@ export default function BlogListPage() {
     return m;
   }, [posts]);
 
-  const handleCreate = async (payload) => {
-    const doc = await createDoc('blog-posts', payload);
-    setReloadKey((k) => k + 1);
-    if (doc?.id) navigate(`/blog/${doc.id}`);
-  };
-
   return (
     <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
       {/* Header */}
@@ -104,21 +81,11 @@ export default function BlogListPage() {
           </h2>
           <p className="text-[var(--text-muted)] text-sm mt-1">Thông báo, chia sẻ, tài liệu — phân theo phòng ban</p>
         </div>
-        <button onClick={() => setCreateOpen(true)}
+        <button onClick={() => navigate('/blog/new')}
           className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-xl bg-blue-500 hover:bg-blue-600 text-white transition-all">
           <Plus size={14} /> Viết bài mới
         </button>
       </div>
-
-      <FormModal
-        open={createOpen}
-        onClose={() => setCreateOpen(false)}
-        title="Viết bài mới"
-        subtitle="Chọn phòng ban + trạng thái. Sau khi tạo có thể sửa tiếp trong trang chi tiết."
-        fields={CREATE_FIELDS}
-        submitLabel="Đăng bài"
-        onSubmit={handleCreate}
-      />
 
       {/* Filter bar */}
       <div className="glass-card p-4 space-y-3">

@@ -159,13 +159,12 @@ export const BlogPosts: CollectionConfig = {
     },
     {
       name: "content",
-      label: "Nội dung bài viết",
-      type: "textarea",
-      required: true,
+      label: "Nội dung bài viết (BlockNote JSON)",
+      type: "json",
+      required: false,
       admin: {
-        rows: 15,
         description:
-          "Nội dung chi tiết. Hỗ trợ markdown: **đậm**, *nghiêng*, ## Đề mục, - danh sách, [link](url), ![ảnh](url).",
+          "JSON array các block do BlockNote sinh (heading, paragraph, list, image, quote...). Sửa qua trang /blog/:id/edit trên portal, KHÔNG sửa tay ở đây (dễ break).",
       },
     },
     {

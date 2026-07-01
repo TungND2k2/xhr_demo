@@ -9,6 +9,12 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@blocknote/core": "^0.51.4",
+    "@blocknote/mantine": "^0.51.4",
+    "@blocknote/react": "^0.51.4",
+    "@mantine/core": "^9.4.1",
+    "@mantine/hooks": "^9.4.1",
+    "@mantine/utils": "^6.0.22",
     "clsx": "^2.0.0",
     "framer-motion": "^10.16.4",
     "lucide-react": "^0.284.0",

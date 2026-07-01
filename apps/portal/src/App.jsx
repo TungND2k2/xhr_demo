@@ -25,6 +25,7 @@ import LoginPage from './pages/LoginPage';
 import ProfilePage from './pages/ProfilePage';
 import BlogListPage from './pages/BlogListPage';
 import BlogDetailPage from './pages/BlogDetailPage';
+import BlogEditorPage from './pages/BlogEditorPage';
 import useAuth from './hooks/useAuth';
 import PrintableFormDetail from './pages/PrintableFormDetail';
 import WorkerHSNForm from './pages/WorkerHSNForm';
@@ -580,7 +581,9 @@ function ProtectedRoutes() {
         <Route path="/profile" element={<ProfilePage />} />
 
         <Route path="/blog" element={<BlogListPage />} />
+        <Route path="/blog/new" element={<BlogEditorPage mode="create" />} />
         <Route path="/blog/:id" element={<BlogDetailRoute />} />
+        <Route path="/blog/:id/edit" element={<BlogEditorPage mode="edit" />} />
 
         <Route path="/roles" element={<RolesListRoute />} />
 
