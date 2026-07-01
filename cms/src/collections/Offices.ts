@@ -67,6 +67,7 @@ export const Offices: CollectionConfig = {
             { label: "🇰🇷 Hàn Quốc", value: "kr" },
             { label: "🇹🇼 Đài Loan", value: "tw" },
             { label: "🇩🇪 Đức", value: "de" },
+            { label: "🇶🇦 Qatar", value: "qa" },
             { label: "Khác", value: "other" },
           ],
           admin: { width: "50%" },

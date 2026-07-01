@@ -211,11 +211,12 @@ function FieldInput({ field, value, onChange, disabled }) {
         </select>
       ) : (
         <input
-          type={field.type === 'number' ? 'number' : field.type === 'date' ? 'date' : 'text'}
+          type={field.type === 'number' ? 'number' : field.type === 'date' ? 'date' : field.type === 'password' ? 'password' : field.type === 'email' ? 'email' : 'text'}
           value={value}
           onChange={(e) => onChange(e.target.value)}
           placeholder={field.placeholder}
           disabled={disabled}
+          autoComplete={field.type === 'password' ? 'new-password' : undefined}
           className={inputCls}
         />
       )}

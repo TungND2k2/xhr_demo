@@ -13,6 +13,8 @@ export const WORKER_STATUS_LABELS = {
   deployed: '✈️ Đã xuất cảnh',
   working: '💼 Đang làm việc',
   returned: '🏠 Đã về nước',
+  liquidated: '📑 Đã thanh lý HĐ',
+  escaped: '🏃 Bỏ trốn',
   paused: '⏸ Khoá tạm',
   blacklisted: '🚫 Blacklist',
 };
@@ -22,8 +24,9 @@ export const MARKET_LABELS = {
   kr: '🇰🇷 Hàn Quốc',
   tw: '🇹🇼 Đài Loan',
   de: '🇩🇪 Đức',
-  me: '🇸🇦 Trung Đông',
-  eu: '🇪🇺 EU',
+  qa: '🇶🇦 Qatar',
+  me: '🇸🇦 Trung Đông khác',
+  eu: '🇪🇺 EU khác',
   other: 'Khác',
 };
 

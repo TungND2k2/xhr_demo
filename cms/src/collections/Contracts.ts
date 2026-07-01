@@ -224,6 +224,43 @@ export const Contracts: CollectionConfig = {
               type: "row",
               fields: [
                 {
+                  name: "handoverToHCNSAt",
+                  label: "Ngày bàn giao HSơ cho HCNS",
+                  type: "date",
+                  admin: {
+                    width: "33%",
+                    date: { pickerAppearance: "dayOnly" },
+                    description: "Nghiệp vụ (W5) bàn giao bản scan HĐLĐ cho phòng HCNS lưu trữ. HCNS dùng để tracking 'đã nhận đủ HĐ tháng X'.",
+                  },
+                },
+                {
+                  name: "liquidationDate",
+                  label: "Ngày thanh lý HĐ",
+                  type: "date",
+                  admin: {
+                    width: "33%",
+                    date: { pickerAppearance: "dayOnly" },
+                    description: "Set khi LĐ hết hạn/về nước, đã thanh lý xong. Dùng cho báo cáo HCNS tháng.",
+                  },
+                },
+                {
+                  name: "liquidationType",
+                  label: "Loại thanh lý",
+                  type: "select",
+                  options: [
+                    { label: "Đơn phương (theo cục)", value: "unilateral" },
+                    { label: "Song phương (đôi bên)", value: "bilateral" },
+                    { label: "Hết hạn HĐ", value: "expired" },
+                    { label: "Phạt vi phạm", value: "penalty" },
+                  ],
+                  admin: { width: "34%", description: "Bắt buộc khi liquidationDate đã set." },
+                },
+              ],
+            },
+            {
+              type: "row",
+              fields: [
+                {
                   name: "flightNumber",
                   label: "Số hiệu chuyến bay",
                   type: "text",

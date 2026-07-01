@@ -484,6 +484,44 @@ export const PAGES = {
     },
   },
 
+  users: {
+    title: 'Người dùng',
+    subtitle: 'Tài khoản đăng nhập portal & CMS — gán role để phân quyền',
+    collection: 'users',
+    sort: 'displayName',
+    columns: [
+      { key: 'displayName', label: 'Tên hiển thị', render: (u) => <span className="font-semibold">{u.displayName ?? '—'}</span> },
+      { key: 'email', label: 'Email', render: (u) => <span className="font-mono text-xs text-blue-500">{u.email ?? '—'}</span> },
+      { key: 'roleRef', label: 'Vai trò', render: (u) => typeof u.roleRef === 'object' ? (u.roleRef?.name ?? '—') : (u.role ?? '—') },
+      { key: 'isActive', label: 'Hoạt động', render: (u) => u.isActive ? '✅' : '⏸' },
+      { key: 'telegramUserId', label: 'Telegram ID', render: (u) => u.telegramUserId ?? '—' },
+    ],
+    headerSummary: (u) => ({
+      title: u.displayName ?? u.email ?? u.id,
+      subtitle: u.email,
+      badges: [
+        { label: typeof u.roleRef === 'object' ? (u.roleRef?.name ?? '—') : (u.role ?? '—'), color: 'blue' },
+        { label: u.isActive ? '✅ Hoạt động' : '⏸ Tạm khoá', color: u.isActive ? 'green' : 'slate' },
+      ],
+    }),
+    detailSections: (u) => {
+      const E = (key, type, options) => ({ edit: { key, type, options } });
+      return [
+        {
+          title: 'Thông tin tài khoản',
+          fields: [
+            ['Tên hiển thị', u.displayName, E('displayName', 'text')],
+            ['Email', u.email, { mono: true }],
+            ['Vai trò (legacy)', u.role],
+            ['Vai trò (Role mới)', typeof u.roleRef === 'object' ? u.roleRef?.name : u.roleRef],
+            ['Đang hoạt động', u.isActive ? '✅ Có' : '❌ Không'],
+            ['Telegram User ID', u.telegramUserId, { mono: true, edit: { key: 'telegramUserId', type: 'text' } }],
+          ],
+        },
+      ];
+    },
+  },
+
   roles: {
     title: 'Vai trò',
     subtitle: 'Phân quyền chi tiết theo collection × action — admin tạo & gán cho từng user',

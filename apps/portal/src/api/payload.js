@@ -145,6 +145,10 @@ export async function fetchPayload(path, init = {}) {
   if (res.status === 401 && token) {
     persistAuth(null, null);
   }
+  // 403 trên endpoint /users/me → user bị revoke / role thay đổi sai chỗ → cũng clear
+  if (res.status === 403 && path.startsWith('/users/me')) {
+    persistAuth(null, null);
+  }
   return res;
 }
 

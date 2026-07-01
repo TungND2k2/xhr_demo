@@ -36,12 +36,29 @@ export default function BulkActionBar({
       );
       const ok = results.filter((r) => r.status === 'fulfilled').length;
       const failed = results.length - ok;
+
+      // Toàn bộ fail — KHÔNG xoá được record nào (vd no permission).
+      if (ok === 0) {
+        const firstReason = results.find((r) => r.status === 'rejected')?.reason;
+        const reasonMsg = firstReason instanceof Error
+          ? firstReason.message
+          : firstReason ? String(firstReason) : 'Không rõ lý do';
+        setError(`❌ Không xoá được bản ghi nào. Lý do: ${reasonMsg}`);
+        return;
+      }
+
+      // Một phần fail — báo rõ con số + lý do
       if (failed > 0) {
-        setError(`Xoá thành công ${ok}/${results.length}. ${failed} bản ghi không xoá được (có thể đang được tham chiếu).`);
-        // Still notify parent so it can refresh + show what's left
+        const firstReason = results.find((r) => r.status === 'rejected')?.reason;
+        const reasonMsg = firstReason instanceof Error
+          ? firstReason.message
+          : firstReason ? String(firstReason) : '?';
+        setError(`⚠ Đã xoá ${ok}/${results.length}. ${failed} bản ghi bị từ chối (lý do: ${reasonMsg}).`);
         onDeleted?.(selectedIds);
         return;
       }
+
+      // Tất cả thành công
       setConfirmOpen(false);
       onDeleted?.(selectedIds);
     } catch (e) {

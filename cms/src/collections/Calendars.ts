@@ -1,4 +1,5 @@
 import type { CollectionConfig } from "payload";
+import { accessRead, accessCreate, accessUpdate, accessDelete } from "../utilities/role-access";
 
 /**
  * Calendars — lịch họp / lịch hẹn / lịch sự kiện.
@@ -30,11 +31,12 @@ export const Calendars: CollectionConfig = {
     ],
   },
   access: {
-    read: ({ req: { user } }) => !!user,
-    create: ({ req: { user } }) => !!user,
-    update: ({ req: { user } }) => !!user,
-    delete: ({ req: { user } }) =>
-      ["admin", "manager"].includes(user?.role ?? ""),
+    // Read/Create/Update: mọi user có quyền (default permissions của tất cả role).
+    // Delete: chỉ Admin + Manager + Hành chính — theo role.permissions hoặc legacy enum.
+    read: accessRead("calendars", ["admin", "manager", "recruiter", "trainer", "visa_specialist", "accountant", "medical"]),
+    create: accessCreate("calendars", ["admin", "manager", "recruiter", "trainer", "visa_specialist", "accountant", "medical"]),
+    update: accessUpdate("calendars", ["admin", "manager", "recruiter", "trainer", "visa_specialist", "accountant", "medical"]),
+    delete: accessDelete("calendars", ["admin", "manager"]),
   },
   fields: [
     {

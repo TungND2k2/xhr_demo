@@ -103,8 +103,9 @@ export const Roles: CollectionConfig = {
         { label: "🇰🇷 Hàn Quốc", value: "kr" },
         { label: "🇹🇼 Đài Loan", value: "tw" },
         { label: "🇩🇪 Đức", value: "de" },
-        { label: "🇸🇦 Trung Đông", value: "me" },
-        { label: "🇪🇺 EU", value: "eu" },
+        { label: "🇶🇦 Qatar", value: "qa" },
+        { label: "🇸🇦 Trung Đông khác", value: "me" },
+        { label: "🇪🇺 EU khác", value: "eu" },
         { label: "Khác", value: "other" },
       ],
       admin: {

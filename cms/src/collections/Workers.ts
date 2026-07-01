@@ -103,14 +103,12 @@ export const Workers: CollectionConfig = {
                   name: "dob",
                   label: "Ngày sinh",
                   type: "date",
-                  required: true,
                   admin: { width: "33%", date: { pickerAppearance: "dayOnly" } },
                 },
                 {
                   name: "gender",
                   label: "Giới tính",
                   type: "select",
-                  required: true,
                   options: [
                     { label: "Nam", value: "male" },
                     { label: "Nữ", value: "female" },
@@ -138,7 +136,6 @@ export const Workers: CollectionConfig = {
                   name: "phone",
                   label: "Số điện thoại",
                   type: "text",
-                  required: true,
                   admin: { width: "33%" },
                 },
                 {
@@ -514,7 +511,8 @@ export const Workers: CollectionConfig = {
                     { label: "🇰🇷 Hàn Quốc", value: "kr" },
                     { label: "🇹🇼 Đài Loan", value: "tw" },
                     { label: "🇩🇪 Đức", value: "de" },
-                    { label: "🇸🇦 Trung Đông", value: "me" },
+                    { label: "🇶🇦 Qatar", value: "qa" },
+                    { label: "🇸🇦 Trung Đông khác", value: "me" },
                     { label: "🇪🇺 EU khác", value: "eu" },
                     { label: "Khác", value: "other" },
                   ],
@@ -557,8 +555,35 @@ export const Workers: CollectionConfig = {
                 { label: "✈️ Đã xuất cảnh", value: "deployed" },
                 { label: "💼 Đang làm việc tại NN", value: "working" },
                 { label: "🏠 Đã về nước", value: "returned" },
+                { label: "📑 Đã thanh lý HĐ", value: "liquidated" },
+                { label: "🏃 Bỏ trốn", value: "escaped" },
                 { label: "⛔ Khoá tạm", value: "paused" },
                 { label: "🚫 Blacklist", value: "blacklisted" },
+              ],
+            },
+            {
+              type: "row",
+              fields: [
+                {
+                  name: "returnedAt",
+                  label: "Ngày về nước",
+                  type: "date",
+                  admin: {
+                    width: "50%",
+                    date: { pickerAppearance: "dayOnly" },
+                    description: "Set khi status chuyển sang 'returned'. Dùng cho báo cáo HCNS tháng.",
+                  },
+                },
+                {
+                  name: "escapedAt",
+                  label: "Ngày bỏ trốn / mất liên lạc",
+                  type: "date",
+                  admin: {
+                    width: "50%",
+                    date: { pickerAppearance: "dayOnly" },
+                    description: "Set khi status chuyển sang 'escaped'. Dùng cho báo cáo HCNS tháng.",
+                  },
+                },
               ],
             },
             {

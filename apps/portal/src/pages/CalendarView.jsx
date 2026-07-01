@@ -6,13 +6,13 @@ import { listDocs, fetchPayload } from '../api/payload';
 
 const WEEKDAYS = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'];
 const EVENT_COLORS = {
-  meeting:    { bg: 'bg-blue-500/15',   text: 'text-blue-600 dark:text-blue-400',     dot: 'bg-blue-500' },
-  training:   { bg: 'bg-cyan-500/15',   text: 'text-cyan-600 dark:text-cyan-400',     dot: 'bg-cyan-500' },
-  interview:  { bg: 'bg-purple-500/15', text: 'text-purple-600 dark:text-purple-400', dot: 'bg-purple-500' },
-  deadline:   { bg: 'bg-red-500/15',    text: 'text-red-600 dark:text-red-400',       dot: 'bg-red-500' },
-  flight:     { bg: 'bg-amber-500/15',  text: 'text-amber-600 dark:text-amber-400',   dot: 'bg-amber-500' },
-  exam:       { bg: 'bg-green-500/15',  text: 'text-green-600 dark:text-green-400',   dot: 'bg-green-500' },
-  default:    { bg: 'bg-slate-500/15',  text: 'text-slate-600 dark:text-slate-400',   dot: 'bg-slate-500' },
+  meeting:    { bg: 'bg-gradient-to-r from-blue-500/15 to-blue-500/5 border-l-2 border-blue-500',   text: 'text-blue-600 dark:text-blue-400',     dot: 'bg-blue-500' },
+  training:   { bg: 'bg-gradient-to-r from-cyan-500/15 to-cyan-500/5 border-l-2 border-cyan-500',   text: 'text-cyan-600 dark:text-cyan-400',     dot: 'bg-cyan-500' },
+  interview:  { bg: 'bg-gradient-to-r from-purple-500/15 to-purple-500/5 border-l-2 border-purple-500', text: 'text-purple-600 dark:text-purple-400', dot: 'bg-purple-500' },
+  deadline:   { bg: 'bg-gradient-to-r from-red-500/15 to-red-500/5 border-l-2 border-red-500',    text: 'text-red-600 dark:text-red-400',       dot: 'bg-red-500' },
+  flight:     { bg: 'bg-gradient-to-r from-amber-500/15 to-amber-500/5 border-l-2 border-amber-500',  text: 'text-amber-600 dark:text-amber-400',   dot: 'bg-amber-500' },
+  exam:       { bg: 'bg-gradient-to-r from-green-500/15 to-green-500/5 border-l-2 border-green-500',  text: 'text-green-600 dark:text-green-400',   dot: 'bg-green-500' },
+  default:    { bg: 'bg-gradient-to-r from-slate-500/15 to-slate-500/5 border-l-2 border-slate-500',  text: 'text-slate-600 dark:text-slate-400',   dot: 'bg-slate-500' },
 };
 const EVENT_TYPE_LABELS = {
   meeting: 'Họp', training: 'Đào tạo', interview: 'PV', deadline: 'Hạn',
@@ -28,6 +28,18 @@ function isSameDay(a, b) {
 }
 function fmtTime(d) {
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+}
+function fmtDateVN(yyyymmdd) {
+  // "2026-06-24" → "24/06"
+  if (!yyyymmdd || yyyymmdd.length < 10) return yyyymmdd;
+  return `${yyyymmdd.slice(8, 10)}/${yyyymmdd.slice(5, 7)}`;
+}
+function daysBetween(startStr, endStr) {
+  if (!startStr || !endStr) return 0;
+  const a = new Date(startStr);
+  const b = new Date(endStr);
+  if (Number.isNaN(a.getTime()) || Number.isNaN(b.getTime())) return 0;
+  return Math.round((b.getTime() - a.getTime()) / 86_400_000) + 1;
 }
 
 /** Generate 6×7 grid of dates centered on `month` (Monday-start). */
@@ -82,10 +94,20 @@ export default function CalendarView() {
     const map = new Map();
     for (const e of events) {
       if (!e.startAt) continue;
-      const d = new Date(e.startAt);
-      const key = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
-      if (!map.has(key)) map.set(key, []);
-      map.get(key).push(e);
+      const start = new Date(e.startAt);
+      const end = e.endAt ? new Date(e.endAt) : start;
+      // Loop từng ngày từ start → end (inclusive), mỗi ngày 1 entry — multi-day
+      // sự kiện hiện trên mọi ngày trong khoảng.
+      const cursor = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+      const endDay = new Date(end.getFullYear(), end.getMonth(), end.getDate());
+      let guard = 0;
+      while (cursor <= endDay && guard < 366) {
+        const key = `${cursor.getFullYear()}-${cursor.getMonth()}-${cursor.getDate()}`;
+        if (!map.has(key)) map.set(key, []);
+        map.get(key).push(e);
+        cursor.setDate(cursor.getDate() + 1);
+        guard += 1;
+      }
     }
     return map;
   }, [events]);
@@ -96,18 +118,18 @@ export default function CalendarView() {
     <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-6 print-area">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h2 className="text-3xl font-black text-[var(--text-main)] flex items-center gap-3">
-            <CalendarIcon className="text-blue-500" size={28} />
+          <h2 className="text-3xl font-black bg-gradient-to-r from-blue-600 to-indigo-600 dark:from-blue-400 dark:to-indigo-400 bg-clip-text text-transparent tracking-tight flex items-center gap-3">
+            <CalendarIcon className="text-blue-500 dark:text-blue-400" size={28} />
             Lịch họp / Sự kiện
           </h2>
-          <p className="text-sm text-[var(--text-muted)]">{events.length} sự kiện trong 3 tháng đang xem</p>
+          <p className="text-sm text-[var(--text-muted)] font-medium mt-1">{events.length} sự kiện trong 3 tháng đang xem</p>
         </div>
         <div className="flex items-center gap-2 no-print">
-          <button onClick={() => setMonth(addMonths(month, -1))} className="p-2 rounded-xl border border-[var(--border-color)] hover:bg-blue-500/5"><ChevronLeft size={16} /></button>
-          <button onClick={() => setMonth(startOfMonth(new Date()))} className="px-3 py-1.5 rounded-xl border border-[var(--border-color)] text-xs font-semibold hover:bg-blue-500/5">Hôm nay</button>
-          <button onClick={() => setMonth(addMonths(month, 1))} className="p-2 rounded-xl border border-[var(--border-color)] hover:bg-blue-500/5"><ChevronRight size={16} /></button>
-          <div className="ml-3 text-lg font-bold text-[var(--text-main)] min-w-[140px]">
-            Tháng {month.getMonth() + 1}/{month.getFullYear()}
+          <button onClick={() => setMonth(addMonths(month, -1))} className="p-2 rounded-xl border border-[var(--border-color)] hover:border-blue-500/30 hover:bg-blue-500/5 transition-all text-slate-500"><ChevronLeft size={16} /></button>
+          <button onClick={() => setMonth(startOfMonth(new Date()))} className="px-4 py-2 rounded-xl border border-[var(--border-color)] text-xs font-bold hover:border-blue-500/30 hover:bg-blue-500/5 transition-all text-slate-600 dark:text-slate-300">Hôm nay</button>
+          <button onClick={() => setMonth(addMonths(month, 1))} className="p-2 rounded-xl border border-[var(--border-color)] hover:border-blue-500/30 hover:bg-blue-500/5 transition-all text-slate-500"><ChevronRight size={16} /></button>
+          <div className="ml-3 text-lg font-bold text-[var(--text-main)] min-w-[140px] tracking-tight">
+            Tháng {month.getMonth() + 1} / {month.getFullYear()}
           </div>
         </div>
       </div>
@@ -138,14 +160,14 @@ export default function CalendarView() {
                     setModal({ mode: 'create', date: new Date(d) });
                   }
                 }}
-                className={`border-r border-b border-[var(--border-color)] last-of-type:border-r-0 p-1.5 overflow-hidden group cursor-pointer hover:bg-blue-500/[0.03] transition-colors ${
-                  inMonth ? '' : 'bg-black/[0.015] dark:bg-white/[0.015]'
+                className={`border-r border-b border-[var(--border-color)] last-of-type:border-r-0 p-1.5 overflow-hidden group cursor-pointer hover:bg-blue-500/[0.02] dark:hover:bg-cyan-500/[0.01] transition-all duration-200 ${
+                  inMonth ? '' : 'bg-black/[0.01] dark:bg-white/[0.005]'
                 }`}
                 data-cell-bg
               >
                 <div className={`flex items-center justify-between mb-1 px-1 ${inMonth ? '' : 'opacity-40'}`} data-cell-bg>
                   <span className={`text-xs font-bold ${
-                    isToday ? 'bg-blue-500 text-white rounded-full w-6 h-6 flex items-center justify-center'
+                    isToday ? 'bg-gradient-to-br from-blue-500 to-indigo-600 text-white rounded-full w-6 h-6 flex items-center justify-center shadow-md shadow-blue-500/30 font-bold scale-110'
                     : isSunday ? 'text-red-500'
                     : 'text-[var(--text-main)]'
                   }`}>
@@ -153,7 +175,7 @@ export default function CalendarView() {
                   </span>
                   <button
                     onClick={(e) => { e.stopPropagation(); setModal({ mode: 'create', date: new Date(d) }); }}
-                    className="opacity-0 group-hover:opacity-100 w-5 h-5 rounded bg-blue-500 text-white flex items-center justify-center transition-opacity no-print"
+                    className="opacity-0 group-hover:opacity-100 w-5 h-5 rounded-lg bg-blue-500 hover:bg-blue-600 text-white flex items-center justify-center transition-all duration-150 no-print shadow-sm"
                     title="Tạo sự kiện"
                   >
                     <Plus size={12} />
@@ -167,7 +189,7 @@ export default function CalendarView() {
                         key={e.id}
                         onClick={(ev) => { ev.stopPropagation(); setModal({ mode: 'edit', event: e }); }}
                         title={`${e.title} (${EVENT_TYPE_LABELS[e.eventType] ?? e.eventType ?? 'event'}) — click để sửa`}
-                        className={`w-full text-left px-1.5 py-0.5 rounded text-[10px] truncate ${c.bg} ${c.text} hover:opacity-80 transition-opacity flex items-center gap-1`}
+                        className={`w-full text-left px-1.5 py-0.5 rounded-md text-[10px] truncate ${c.bg} ${c.text} hover:opacity-85 shadow-[0_1px_2px_rgba(0,0,0,0.02)] transition-opacity flex items-center gap-1 font-semibold`}
                       >
                         <span className={`w-1 h-1 rounded-full ${c.dot} shrink-0`} />
                         {!e.allDay && e.startAt && <span className="opacity-70 font-mono">{fmtTime(new Date(e.startAt))}</span>}
@@ -232,7 +254,15 @@ function EventModal({ mode, date, event, onClose, onSaved }) {
   const [allDay, setAllDay] = useState(event?.allDay ?? false);
   const [startTime, setStartTime] = useState(event?.startAt ? fmtTime(new Date(event.startAt)) : '09:00');
   const [endTime, setEndTime] = useState(event?.endAt ? fmtTime(new Date(event.endAt)) : '10:00');
-  const [eventDate, setEventDate] = useState(dateStr);
+  const initEndDate = useMemo(() => {
+    if (mode === 'edit' && event?.endAt) {
+      const d = new Date(event.endAt);
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    }
+    return dateStr;
+  }, [mode, event, dateStr]);
+  const [startDate, setStartDate] = useState(dateStr);
+  const [endDate, setEndDate] = useState(initEndDate);
   const [location, setLocation] = useState(event?.location ?? '');
   const [meetingLink, setMeetingLink] = useState(event?.meetingLink ?? '');
   const [description, setDescription] = useState(
@@ -244,15 +274,20 @@ function EventModal({ mode, date, event, onClose, onSaved }) {
 
   const handleSave = async () => {
     if (!title.trim()) { setError('Vui lòng nhập tiêu đề'); return; }
+    if (endDate < startDate) { setError('Ngày kết thúc phải sau ngày bắt đầu'); return; }
+    if (endDate === startDate && !allDay && endTime <= startTime) {
+      setError('Giờ kết thúc phải sau giờ bắt đầu');
+      return;
+    }
     setSaving(true);
     setError(null);
     try {
       const startAt = allDay
-        ? `${eventDate}T00:00:00+07:00`
-        : `${eventDate}T${startTime}:00+07:00`;
+        ? `${startDate}T00:00:00+07:00`
+        : `${startDate}T${startTime}:00+07:00`;
       const endAt = allDay
-        ? `${eventDate}T23:59:59+07:00`
-        : `${eventDate}T${endTime}:00+07:00`;
+        ? `${endDate}T23:59:59+07:00`
+        : `${endDate}T${endTime}:00+07:00`;
       const body = {
         title: title.trim(),
         eventType,
@@ -358,24 +393,54 @@ function EventModal({ mode, date, event, onClose, onSaved }) {
             </div>
           </div>
 
-          <div className={allDay ? '' : 'grid grid-cols-3 gap-3'}>
+          {/* Ngày bắt đầu - Ngày kết thúc (cho phép nhiều ngày) */}
+          <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Ngày</label>
-              <input type="date" value={eventDate} onChange={(e) => setEventDate(e.target.value)} className="w-full px-3 py-2 text-sm rounded-xl border border-[var(--border-color)] bg-transparent outline-none focus:ring-2 focus:ring-blue-500/20" />
+              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Ngày bắt đầu</label>
+              <input
+                type="date"
+                value={startDate}
+                onChange={(e) => {
+                  setStartDate(e.target.value);
+                  // Auto đẩy endDate nếu đang trước startDate
+                  if (endDate < e.target.value) setEndDate(e.target.value);
+                }}
+                className="w-full px-3 py-2 text-sm rounded-xl border border-[var(--border-color)] bg-transparent outline-none focus:ring-2 focus:ring-blue-500/20"
+              />
             </div>
-            {!allDay && (
-              <>
-                <div>
-                  <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Giờ bắt đầu</label>
-                  <input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} className="w-full px-3 py-2 text-sm rounded-xl border border-[var(--border-color)] bg-transparent outline-none focus:ring-2 focus:ring-blue-500/20" />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Giờ kết thúc</label>
-                  <input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} className="w-full px-3 py-2 text-sm rounded-xl border border-[var(--border-color)] bg-transparent outline-none focus:ring-2 focus:ring-blue-500/20" />
-                </div>
-              </>
-            )}
+            <div>
+              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Ngày kết thúc</label>
+              <input
+                type="date"
+                value={endDate}
+                min={startDate}
+                onChange={(e) => setEndDate(e.target.value)}
+                className="w-full px-3 py-2 text-sm rounded-xl border border-[var(--border-color)] bg-transparent outline-none focus:ring-2 focus:ring-blue-500/20"
+              />
+            </div>
           </div>
+
+          {/* Giờ — chỉ hiện khi không phải allDay */}
+          {!allDay && (
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Giờ bắt đầu</label>
+                <input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} className="w-full px-3 py-2 text-sm rounded-xl border border-[var(--border-color)] bg-transparent outline-none focus:ring-2 focus:ring-blue-500/20" />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Giờ kết thúc</label>
+                <input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} className="w-full px-3 py-2 text-sm rounded-xl border border-[var(--border-color)] bg-transparent outline-none focus:ring-2 focus:ring-blue-500/20" />
+              </div>
+            </div>
+          )}
+
+          {/* Hint: nhiều ngày */}
+          {startDate !== endDate && (
+            <div className="text-[11px] text-blue-500 bg-blue-500/5 border border-blue-500/20 rounded-lg px-3 py-2">
+              📆 Sự kiện kéo dài <strong>{daysBetween(startDate, endDate)}</strong> ngày
+              ({fmtDateVN(startDate)} → {fmtDateVN(endDate)})
+            </div>
+          )}
 
           <div>
             <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Địa điểm</label>

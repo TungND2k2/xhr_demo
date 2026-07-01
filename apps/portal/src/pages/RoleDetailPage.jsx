@@ -194,11 +194,11 @@ export default function RoleDetailPage({ recordId, onBack }) {
     <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-6 print-area">
       {/* Top bar */}
       <div className="flex items-center justify-between no-print">
-        <button onClick={onBack} className="flex items-center gap-2 text-sm text-slate-500 hover:text-[var(--text-main)] transition-colors">
-          <ArrowLeft size={16} /> Quay lại Vai trò
+        <button onClick={onBack} className="flex items-center gap-2 text-xs font-bold text-slate-400 hover:text-[var(--text-main)] transition-colors">
+          <ArrowLeft size={16} /> QUAY LẠI
         </button>
         <div className="flex items-center gap-2">
-          <button onClick={handleSave} disabled={saving} className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-xl bg-blue-500 hover:bg-blue-600 text-white transition-all disabled:opacity-50">
+          <button onClick={handleSave} disabled={saving} className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold rounded-xl bg-blue-500 hover:bg-blue-600 text-white transition-all disabled:opacity-50 shadow-sm shadow-blue-500/20">
             <Save size={14} /> {saving ? 'Đang lưu...' : 'Lưu thay đổi'}
           </button>
           {!isSystemRole && (
@@ -301,10 +301,10 @@ export default function RoleDetailPage({ recordId, onBack }) {
           </div>
           {!isAdminRole && (
             <div className="flex gap-2">
-              <button onClick={handleSelectAll} className="px-3 py-1.5 text-[11px] font-semibold rounded-lg border border-[var(--border-color)] text-blue-500 hover:bg-blue-500/5">
+              <button onClick={handleSelectAll} className="px-3 py-1.5 text-[10px] font-extrabold uppercase tracking-wider rounded-lg border border-[var(--border-color)] text-blue-500 hover:bg-blue-500/5 transition-all">
                 Chọn tất cả
               </button>
-              <button onClick={handleClearAll} className="px-3 py-1.5 text-[11px] font-semibold rounded-lg border border-[var(--border-color)] text-slate-500 hover:bg-black/5 dark:hover:bg-white/5">
+              <button onClick={handleClearAll} className="px-3 py-1.5 text-[10px] font-extrabold uppercase tracking-wider rounded-lg border border-[var(--border-color)] text-slate-500 hover:bg-black/5 dark:hover:bg-white/5 transition-all">
                 Bỏ tất cả
               </button>
             </div>
@@ -315,9 +315,9 @@ export default function RoleDetailPage({ recordId, onBack }) {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-[var(--border-color)]">
-                <th className="text-left text-[10px] uppercase tracking-wider text-slate-500 font-bold pb-2 pr-4">Collection</th>
+                <th className="text-left text-[10px] uppercase tracking-wider text-slate-500 font-bold pb-3 pr-4">Collection</th>
                 {ACTIONS.map((a) => (
-                  <th key={a.key} className="text-center text-[10px] uppercase tracking-wider text-slate-500 font-bold pb-2 px-1 min-w-[60px]">
+                  <th key={a.key} className="text-center text-[10px] uppercase tracking-wider text-slate-500 font-bold pb-3 px-1 min-w-[60px]">
                     <button
                       onClick={() => handleToggleColumn(a.key)}
                       disabled={isAdminRole}
@@ -328,14 +328,14 @@ export default function RoleDetailPage({ recordId, onBack }) {
                     </button>
                   </th>
                 ))}
-                <th className="text-center text-[10px] uppercase tracking-wider text-slate-500 font-bold pb-2 px-1 w-12">⚡</th>
+                <th className="text-center text-[10px] uppercase tracking-wider text-slate-500 font-bold pb-3 px-1 w-12">⚡</th>
               </tr>
             </thead>
             <tbody>
               {COLLECTION_GROUPS.map((g, gi) => (
                 <React.Fragment key={g.label}>
-                  <tr className="bg-blue-500/5">
-                    <td colSpan={ACTIONS.length + 2} className="px-2 py-2 text-[10px] font-bold uppercase tracking-widest text-blue-500">
+                  <tr className="bg-gradient-to-r from-blue-500/10 via-blue-500/[0.02] to-transparent">
+                    <td colSpan={ACTIONS.length + 2} className="px-3 py-2 text-[9px] font-black uppercase tracking-[0.2em] text-blue-600 dark:text-blue-400">
                       {g.label}
                     </td>
                   </tr>
@@ -343,8 +343,8 @@ export default function RoleDetailPage({ recordId, onBack }) {
                     const row = permissions[c.slug] ?? {};
                     const allOn = ACTIONS.every((a) => row[a.key]);
                     return (
-                      <tr key={c.slug} className="border-b border-[var(--border-color)] last:border-0 hover:bg-blue-500/5">
-                        <td className="py-2 pr-4 text-sm text-[var(--text-main)]">{c.label}</td>
+                      <tr key={c.slug} className="border-b border-[var(--border-color)] last:border-0 hover:bg-blue-500/[0.02] transition-colors">
+                        <td className="py-2.5 px-3 text-xs font-semibold text-[var(--text-main)]">{c.label}</td>
                         {ACTIONS.map((a) => (
                           <td key={a.key} className="text-center py-2 px-1">
                             <label className="inline-flex cursor-pointer" onClick={(e) => isAdminRole && e.preventDefault()}>
@@ -353,7 +353,7 @@ export default function RoleDetailPage({ recordId, onBack }) {
                                 checked={isAdminRole ? true : !!row[a.key]}
                                 onChange={() => handleToggle(c.slug, a.key)}
                                 disabled={isAdminRole}
-                                className="w-4 h-4 rounded border-[var(--border-color)] accent-blue-500 cursor-pointer disabled:cursor-not-allowed"
+                                className="w-4 h-4 rounded-md border-[var(--border-color)] text-blue-500 focus:ring-blue-500/30 cursor-pointer disabled:cursor-not-allowed transition-all"
                               />
                             </label>
                           </td>
