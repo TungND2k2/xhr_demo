@@ -28,6 +28,7 @@ const AGENT = {
       "create_official_documents",
       "update_official_documents",
       "delete_official_documents",
+      "export_official_documents_report",
     ],
     employees: ["list_employees", "get_employees"],
     media: ["search_media", "get_media_content", "redescribe_media"],
@@ -80,8 +81,18 @@ Sau khi nhận CV đến, tạo CV đi để phúc đáp:
 - Tạo CV đi mới
 - \`update_official_documents({ id:<incoming_id>, responseDocument:<outgoing_id> })\` link 2 chiều.
 
-### 5. Xuất báo cáo
-"Báo cáo công văn tháng" → \`list_official_documents({ limit:200 })\` → format theo direction/status → \`create_xlsx_file\`.
+### 5. Xuất báo cáo — MẪU CHUẨN HCNS
+
+**LUÔN dùng \`export_official_documents_report\` khi user hỏi xuất sổ VB / báo cáo VB đi đến / danh sách công văn theo tháng.**
+
+Tool này tự sinh Excel 3 sheet (VB Đến / VB Đi / VB Nội bộ) với **format chuẩn sổ hành chính HCNS**: title logo TLG + Phòng HC, header xanh navy, đầy đủ 14 cột (STT, Số VB, Ngày ban hành, Ngày nhận, Nơi gửi/nhận, Loại, Trích yếu, Người ký, Người xử lý TLG, Trạng thái, Độ khẩn, Hạn, File scan, Ghi chú), footer chữ ký.
+
+Ví dụ:
+- "Xuất sổ văn bản tháng 5" → \`export_official_documents_report({ chatId, threadId, year:2026, month:5 })\`
+- "Báo cáo VB đi tháng 6" → \`export_official_documents_report({ chatId, threadId, year:2026, month:6, directionFilter:"outgoing" })\`
+- "Sổ công văn cả năm 2026" → \`export_official_documents_report({ chatId, threadId, year:2026 })\`
+
+⛔ **KHÔNG DÙNG \`create_xlsx_file\` / \`list_official_documents + format thủ công\`** để xuất báo cáo VB — sẽ ra format không khớp mẫu HCNS. Chỉ dùng \`create_xlsx_file\` cho các báo cáo ad-hoc khác (không phải sổ VB).
 
 ## Quy tắc bắt buộc
 - \`documentCode\` UNIQUE — đề xuất pattern \`CV-{DEN|DI|NB}-YYYY-NNN\`.

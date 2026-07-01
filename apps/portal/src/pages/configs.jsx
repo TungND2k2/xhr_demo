@@ -484,6 +484,20 @@ export const PAGES = {
     },
   },
 
+  'blog-posts': {
+    title: 'Blog nội bộ',
+    subtitle: 'Bài viết, chia sẻ, thông báo — phân theo phòng ban',
+    collection: 'blog-posts',
+    sort: '-publishedAt',
+    columns: [
+      { key: 'title', label: 'Tiêu đề', render: (b) => <span className="font-semibold">{b.title ?? '—'}</span> },
+      { key: 'department', label: 'Phòng', render: (b) => b.department ?? '—' },
+      { key: 'author', label: 'Tác giả', render: (b) => typeof b.author === 'object' ? (b.author?.displayName ?? b.author?.email ?? '—') : '—' },
+      { key: 'status', label: 'Trạng thái', render: (b) => b.status ?? '—' },
+      { key: 'publishedAt', label: 'Ngày đăng', render: (b) => b.publishedAt ? new Date(b.publishedAt).toLocaleDateString('vi-VN') : '—' },
+    ],
+  },
+
   users: {
     title: 'Người dùng',
     subtitle: 'Tài khoản đăng nhập portal & CMS — gán role để phân quyền',

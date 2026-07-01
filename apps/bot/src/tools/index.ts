@@ -24,6 +24,7 @@ import { employeeTools } from "./employees.tools.js";
 import { formInviteTools } from "./form-invites.tools.js";
 import { officialDocumentTools } from "./official-documents.tools.js";
 import { assetWorkflowTools } from "./assets.workflow.js";
+import { officialDocumentWorkflowTools } from "./official-documents.workflow.js";
 
 import { advanceOrderStatus } from "./orders.workflow.js";
 import { orderProgressSummary } from "./orders.summary.js";
@@ -83,6 +84,9 @@ export const allTools = [
 
   // OfficialDocuments — Công văn đến/đi/nội bộ TLG.
   ...officialDocumentTools, // 5: list/get/create/update/delete official-documents
+
+  // OfficialDocuments workflow — xuất sổ VB đi/đến chuẩn HCNS.
+  ...officialDocumentWorkflowTools, // 1: export_official_documents_report
 
   // Email — gửi email cho lãnh đạo (chị Hương + chị Hoa) qua SMTP.
   ...emailTools,            // 1: send_email

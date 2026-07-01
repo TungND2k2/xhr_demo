@@ -7,6 +7,7 @@ import {
   LayoutDashboard, Users as UsersIcon, BarChart3, Settings, Sun, Moon, Search,
   FileText, Briefcase, Building2, Inbox, Calendar, Mail, Bot, MessageSquare, Users2,
   Boxes, Folder, ClipboardList, Plus, Shield, LogOut, Command, ArrowRight, X as XIcon,
+  Newspaper,
 } from 'lucide-react';
 
 import Dashboard from './pages/Dashboard';
@@ -22,6 +23,8 @@ import AssetDetailPage from './pages/AssetDetailPage';
 import RoleDetailPage from './pages/RoleDetailPage';
 import LoginPage from './pages/LoginPage';
 import ProfilePage from './pages/ProfilePage';
+import BlogListPage from './pages/BlogListPage';
+import BlogDetailPage from './pages/BlogDetailPage';
 import useAuth from './hooks/useAuth';
 import PrintableFormDetail from './pages/PrintableFormDetail';
 import WorkerHSNForm from './pages/WorkerHSNForm';
@@ -109,6 +112,7 @@ const NAV_GROUPS = [
       { path: '/calendars', icon: Calendar, label: 'Lịch họp' },
       { path: '/reminders', icon: ClipboardList, label: 'Nhắc việc' },
       { path: '/forms', icon: FileText, label: 'Form / Lời mời' },
+      { path: '/blog', icon: Newspaper, label: 'Blog nội bộ' },
     ],
   },
   {
@@ -314,6 +318,13 @@ function RoleDetailRoute() {
   const { id } = useParams();
   const navigate = useNavigate();
   return <RoleDetailPage recordId={id} onBack={() => navigate('/roles')} />;
+}
+
+// Blog detail — view + edit markdown content
+function BlogDetailRoute() {
+  const { id } = useParams();
+  const navigate = useNavigate();
+  return <BlogDetailPage recordId={id} onBack={() => navigate('/blog')} />;
 }
 
 // Roles list — SimpleListPage + nút Tạo (sau khi tạo redirect sang detail để tick permissions)
@@ -567,6 +578,9 @@ function ProtectedRoutes() {
         ))}
 
         <Route path="/profile" element={<ProfilePage />} />
+
+        <Route path="/blog" element={<BlogListPage />} />
+        <Route path="/blog/:id" element={<BlogDetailRoute />} />
 
         <Route path="/roles" element={<RolesListRoute />} />
 

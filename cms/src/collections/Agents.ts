@@ -115,6 +115,7 @@ const OFFICIAL_DOCUMENT_TOOLS: ToolDef[] = [
   cb("create_official_documents", "➕ Tạo công văn mới", "create_official-documents"),
   cb("update_official_documents", "✏️ Cập nhật công văn", "update_official-documents"),
   cb("delete_official_documents", "🗑 Xoá công văn", "delete_official-documents"),
+  cb("export_official_documents_report", "📊 Xuất sổ VB chuẩn HCNS"),
 ];
 const TELEGRAM_IDENTITY_TOOLS: ToolDef[] = [
   cb("lookup_telegram_user", "🔎 Tra cứu user Telegram"),
