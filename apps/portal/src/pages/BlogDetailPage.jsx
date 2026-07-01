@@ -1,39 +1,57 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import {
-  ArrowLeft, Edit2, User, Calendar, Tag, Eye,
-} from 'lucide-react';
+import { ArrowLeft, Edit2, Eye } from 'lucide-react';
 import { useCreateBlockNote } from '@blocknote/react';
 import { BlockNoteView } from '@blocknote/mantine';
 import '@blocknote/core/fonts/inter.css';
 import '@blocknote/mantine/style.css';
 import { getDoc } from '../api/payload';
 import useAuth from '../hooks/useAuth';
-import { fmtDate } from '../lib/workers-labels';
 import DeleteButton from '../components/DeleteButton';
 
 const DEPT_LABEL = {
-  all: '🏢 Toàn công ty',
-  hcns: '🏢 Hành chính - Nhân sự',
-  tuyendung: '🧑‍💼 Tuyển dụng',
-  daotao: '🎓 Đào tạo',
-  visa: '🛂 Visa - Hồ sơ',
-  ketoan: '💰 Kế toán',
-  yte: '🏥 Y tế',
-  phong_jp: '🇯🇵 Phòng Nhật Bản',
-  phong_kr: '🇰🇷 Phòng Hàn Quốc',
-  phong_tw: '🇹🇼 Phòng Đài Loan',
-  phong_de: '🇩🇪 Phòng Đức',
-  bgd: '👑 Ban Giám đốc',
+  all: 'Toàn công ty',
+  hcns: 'Hành chính - Nhân sự',
+  tuyendung: 'Tuyển dụng',
+  daotao: 'Đào tạo',
+  visa: 'Visa - Hồ sơ',
+  ketoan: 'Kế toán',
+  yte: 'Y tế',
+  phong_jp: 'Phòng Nhật Bản',
+  phong_kr: 'Phòng Hàn Quốc',
+  phong_tw: 'Phòng Đài Loan',
+  phong_de: 'Phòng Đức',
+  bgd: 'Ban Giám đốc',
   other: 'Khác',
 };
 
-const STATUS_META = {
-  draft: { label: '📝 Bản nháp', chip: 'bg-slate-500/10 text-slate-500 border-slate-500/30' },
-  published: { label: '✅ Đã đăng', chip: 'bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/30' },
-  archived: { label: '🗄 Lưu trữ', chip: 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30' },
-};
+const MONTHS = ['Th1', 'Th2', 'Th3', 'Th4', 'Th5', 'Th6', 'Th7', 'Th8', 'Th9', 'Th10', 'Th11', 'Th12'];
+
+function fmtMediumDate(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  return `${d.getDate()} ${MONTHS[d.getMonth()]}, ${d.getFullYear()}`;
+}
+
+function calcReadTime(blocks, title, excerpt) {
+  const text = (Array.isArray(blocks) ? blocks : []).map((b) => {
+    if (!b || !Array.isArray(b.content)) return '';
+    return b.content.map((c) => (c && typeof c === 'object' && c.text) ? c.text : '').join(' ');
+  }).join(' ') + ' ' + (title ?? '') + ' ' + (excerpt ?? '');
+  const words = text.trim().split(/\s+/).filter(Boolean).length;
+  const minutes = Math.max(1, Math.round(words / 220));
+  return minutes;
+}
+
+function getInitials(name, email) {
+  const src = (name || email || '?').trim();
+  if (!src) return '?';
+  const parts = src.split(/\s+/).filter(Boolean);
+  if (parts.length >= 2) return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  return src.slice(0, 2).toUpperCase();
+}
 
 export default function BlogDetailPage({ recordId, onBack }) {
   const navigate = useNavigate();
@@ -51,19 +69,25 @@ export default function BlogDetailPage({ recordId, onBack }) {
     });
   }, [recordId]);
 
-  // Read-only editor luôn được tạo, initialContent = blocks đã lưu
   const initialContent = doc && Array.isArray(doc.content) && doc.content.length > 0
     ? doc.content
     : undefined;
   const editor = useCreateBlockNote({ initialContent }, [doc?.id]);
 
+  const readTime = useMemo(
+    () => (doc ? calcReadTime(doc.content, doc.title, doc.excerpt) : 0),
+    [doc],
+  );
+
   if (loading) return <div className="text-center py-24 text-slate-500">Đang tải...</div>;
   if (!doc) return <div className="text-center py-24 text-red-500">Không tải được bài viết này.</div>;
 
-  const statusMeta = STATUS_META[doc.status] ?? STATUS_META.draft;
   const authorObj = typeof doc.author === 'object' ? doc.author : null;
-  const authorName = authorObj?.displayName ?? authorObj?.email ?? '—';
+  const authorName = authorObj?.displayName ?? authorObj?.email ?? 'Ẩn danh';
+  const authorEmail = authorObj?.email ?? '';
+  const authorInitials = getInitials(authorObj?.displayName, authorObj?.email);
   const featuredImage = typeof doc.featuredImage === 'object' ? doc.featuredImage : null;
+  const hasContent = Array.isArray(doc.content) && doc.content.length > 0;
 
   const canEdit = user?.id && (
     (authorObj && authorObj.id === user.id) ||
@@ -71,83 +95,143 @@ export default function BlogDetailPage({ recordId, onBack }) {
     user.role === 'admin' || user.role === 'manager'
   );
 
-  const hasContent = Array.isArray(doc.content) && doc.content.length > 0;
-
   return (
-    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="max-w-3xl mx-auto space-y-6">
-      {/* Top bar */}
-      <div className="flex items-center justify-between no-print">
-        <button onClick={onBack} className="flex items-center gap-2 text-sm text-slate-500 hover:text-[var(--text-main)]">
-          <ArrowLeft size={16} /> Quay lại Blog
+    <motion.div
+      initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+      className="-m-8 bg-[var(--bg-main)] min-h-[calc(100vh-64px-40px)]"
+    >
+      {/* Sticky minimal top bar */}
+      <div className="sticky top-0 z-10 flex items-center justify-between px-8 py-3 border-b border-[var(--border-color)] bg-[var(--sidebar-bg)]/95 backdrop-blur-sm">
+        <button onClick={onBack} className="flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-[var(--text-main)]">
+          <ArrowLeft size={14} /> Blog
         </button>
         {canEdit && (
           <div className="flex items-center gap-2">
-            <button onClick={() => navigate(`/blog/${doc.id}/edit`)} className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-xl border border-blue-500/40 text-blue-500 hover:bg-blue-500/10">
-              <Edit2 size={14} /> Sửa
+            <button onClick={() => navigate(`/blog/${doc.id}/edit`)} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-full border border-[var(--border-color)] hover:border-blue-500/40 hover:text-blue-500">
+              <Edit2 size={12} /> Sửa
             </button>
             <DeleteButton collection="blog-posts" recordId={doc.id} recordLabel={doc.title} onDeleted={onBack} />
           </div>
         )}
       </div>
 
-      {/* Featured image */}
+      {/* Cover — edge-to-edge full-width */}
       {featuredImage?.url && (
-        <img src={featuredImage.url} alt={doc.title} className="w-full max-h-[400px] object-cover rounded-2xl" />
+        <div className="w-full max-h-[500px] overflow-hidden">
+          <img src={featuredImage.url} alt={doc.title} className="w-full max-h-[500px] object-cover" />
+        </div>
       )}
 
-      {/* Meta + title */}
-      <div className="space-y-3">
-        <div className="flex items-center gap-2 flex-wrap">
-          <div className={`inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-semibold border ${statusMeta.chip}`}>
-            {statusMeta.label}
-          </div>
-          <span className="text-[11px] text-slate-500 font-bold uppercase tracking-wider">
+      {/* Article — centered readable width */}
+      <article className="max-w-[720px] mx-auto px-6 py-12">
+        {/* Category text link */}
+        <div className="mb-5">
+          <span className="text-[13px] font-bold text-slate-500 uppercase tracking-widest">
             {DEPT_LABEL[doc.department] ?? doc.department ?? '—'}
           </span>
         </div>
-        <h1 className="text-4xl font-black text-[var(--text-main)] leading-tight tracking-tight">{doc.title ?? '—'}</h1>
+
+        {/* Title — Medium-style massive serif */}
+        <h1
+          className="text-[42px] md:text-[52px] font-black text-[var(--text-main)] leading-[1.15] tracking-tight mb-4"
+          style={{ fontFamily: 'Georgia, "Times New Roman", serif' }}
+        >
+          {doc.title}
+        </h1>
+
+        {/* Excerpt as subtitle */}
         {doc.excerpt && (
-          <p className="text-lg text-[var(--text-muted)] leading-relaxed">{doc.excerpt}</p>
+          <p
+            className="text-xl md:text-2xl italic text-[var(--text-muted)] leading-relaxed mb-10"
+            style={{ fontFamily: 'Georgia, "Times New Roman", serif' }}
+          >
+            {doc.excerpt}
+          </p>
         )}
-        <div className="flex items-center gap-5 pt-3 border-t border-[var(--border-color)] text-xs text-slate-500">
-          <div className="flex items-center gap-1.5"><User size={13} /><span className="font-semibold">{authorName}</span></div>
-          <div className="flex items-center gap-1.5"><Calendar size={13} />{doc.publishedAt ? fmtDate(doc.publishedAt) : 'Chưa đăng'}</div>
-          {doc.views > 0 && <div className="flex items-center gap-1.5"><Eye size={13} />{doc.views} lượt xem</div>}
-        </div>
-      </div>
 
-      {/* Content — BlockNote readonly */}
-      <div className="blog-content-view">
-        {hasContent ? (
-          <BlockNoteView editor={editor} theme={isDark ? 'dark' : 'light'} editable={false} />
-        ) : (
-          <p className="text-sm text-slate-500 italic py-8">Bài viết này chưa có nội dung.</p>
+        {/* Byline: avatar + author + date + read time */}
+        <div className="flex items-center gap-3 pb-8 mb-10 border-b border-[var(--border-color)]">
+          <div className="w-11 h-11 rounded-full bg-gradient-to-br from-blue-500 to-cyan-500 text-white flex items-center justify-center text-sm font-black shadow-md shadow-blue-500/20 shrink-0">
+            {authorInitials}
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-bold text-[var(--text-main)] truncate">{authorName}</p>
+            <p className="text-xs text-slate-500 flex items-center gap-1.5">
+              <span>{doc.publishedAt ? fmtMediumDate(doc.publishedAt) : 'Chưa đăng'}</span>
+              <span>·</span>
+              <span>{readTime} phút đọc</span>
+              {doc.views > 0 && (
+                <>
+                  <span>·</span>
+                  <span className="flex items-center gap-1"><Eye size={11} />{doc.views}</span>
+                </>
+              )}
+            </p>
+          </div>
+        </div>
+
+        {/* Content — BlockNote readonly */}
+        <div className="bn-blog-view">
+          {hasContent ? (
+            <BlockNoteView editor={editor} theme={isDark ? 'dark' : 'light'} editable={false} />
+          ) : (
+            <p className="text-slate-500 italic text-lg" style={{ fontFamily: 'Georgia, serif' }}>
+              Bài viết này chưa có nội dung.
+            </p>
+          )}
+        </div>
+
+        {/* Tags — text link style */}
+        {Array.isArray(doc.tags) && doc.tags.length > 0 && (
+          <div className="flex items-center gap-x-4 gap-y-2 flex-wrap mt-16 pt-8 border-t border-[var(--border-color)]">
+            {doc.tags.map((t, i) => {
+              const val = typeof t === 'object' ? t.tag : t;
+              return (
+                <span key={i} className="text-sm text-slate-500 hover:text-blue-500 cursor-pointer transition-colors">
+                  #{val}
+                </span>
+              );
+            })}
+          </div>
         )}
-      </div>
 
-      {/* Tags */}
-      {Array.isArray(doc.tags) && doc.tags.length > 0 && (
-        <div className="flex items-center gap-2 flex-wrap pt-4 border-t border-[var(--border-color)]">
-          <Tag size={14} className="text-slate-500" />
-          {doc.tags.map((t, i) => {
-            const val = typeof t === 'object' ? t.tag : t;
-            return (
-              <span key={i} className="px-2.5 py-1 rounded-full text-[11px] font-semibold bg-blue-500/10 text-blue-500 border border-blue-500/30">
-                #{val}
-              </span>
-            );
-          })}
+        {/* Author card */}
+        <div className="mt-16 pt-8 border-t border-[var(--border-color)] flex items-center gap-4">
+          <div className="w-16 h-16 rounded-full bg-gradient-to-br from-blue-500 to-cyan-500 text-white flex items-center justify-center text-xl font-black shadow-lg shadow-blue-500/25 shrink-0">
+            {authorInitials}
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Tác giả</p>
+            <p className="text-lg font-black text-[var(--text-main)]">{authorName}</p>
+            {authorEmail && <p className="text-xs text-slate-500">{authorEmail}</p>}
+          </div>
         </div>
-      )}
+      </article>
 
+      {/* Typography — Medium-esque body text */}
       <style>{`
-        .blog-content-view .bn-editor {
+        .bn-blog-view .bn-editor {
           background: transparent !important;
           padding: 0 !important;
         }
-        .blog-content-view [data-mantine-color-scheme="light"],
-        .blog-content-view [data-mantine-color-scheme="dark"] {
+        .bn-blog-view [data-mantine-color-scheme="light"],
+        .bn-blog-view [data-mantine-color-scheme="dark"] {
           background: transparent !important;
+        }
+        .bn-blog-view .bn-block-content {
+          font-family: Georgia, "Times New Roman", serif;
+          font-size: 20px;
+          line-height: 1.75;
+          color: var(--text-main);
+        }
+        .bn-blog-view .bn-inline-content {
+          font-family: inherit;
+        }
+        .bn-blog-view h1.bn-block-content,
+        .bn-blog-view h2.bn-block-content,
+        .bn-blog-view h3.bn-block-content {
+          font-weight: 900 !important;
+          letter-spacing: -0.01em;
         }
       `}</style>
     </motion.div>
