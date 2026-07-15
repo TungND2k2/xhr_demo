@@ -484,6 +484,70 @@ export const PAGES = {
     },
   },
 
+  students: {
+    title: 'Học viên',
+    subtitle: 'Học viên đăng ký khoá tiếng Hàn / Nhật',
+    collection: 'students',
+    sort: '-createdAt',
+    columns: [
+      { key: 'fullName', label: 'Họ tên', render: (s) => <span className="font-semibold">{s.fullName ?? '—'}</span> },
+      { key: 'courseType', label: 'Khoá', render: (s) => s.courseType === 'nhat' ? '🇯🇵 Nhật' : s.courseType === 'han' ? '🇰🇷 Hàn' : '—' },
+      { key: 'phone', label: 'SĐT', render: (s) => s.phone ?? '—' },
+      { key: 'province', label: 'Tỉnh/TP', render: (s) => s.province ?? '—' },
+      { key: 'status', label: 'Trạng thái', render: (s) => s.status ?? '—' },
+    ],
+    headerSummary: (s) => ({
+      title: s.fullName ?? s.id,
+      subtitle: [s.courseType === 'nhat' ? '🇯🇵 Tiếng Nhật' : '🇰🇷 Tiếng Hàn', s.phone].filter(Boolean).join(' · '),
+      badges: [{ label: s.status ?? '?', color: s.status === 'enrolled' ? 'green' : s.status === 'new' ? 'blue' : s.status === 'rejected' ? 'slate' : 'amber' }],
+    }),
+    detailSections: (s) => {
+      const E = (key, type, options) => ({ edit: { key, type, options } });
+      const LEVEL = { none: 'Chưa học', beginner: 'Sơ cấp', intermediate: 'Trung cấp', advanced: 'Cao cấp' };
+      const GOAL = { communication: 'Giao tiếp', exam: 'Thi TOPIK/JLPT', study_abroad: 'Du học', work_abroad: 'Làm việc nước ngoài', xkld: 'XKLĐ', travel: 'Du lịch', other: 'Khác' };
+      const TIME = { weekday_evening: 'Tối ngày thường', weekend: 'Cuối tuần' };
+      const goals = Array.isArray(s.learningGoals) ? s.learningGoals.map(g => GOAL[g] ?? g).join(', ') : '';
+      const times = Array.isArray(s.availableTimes) ? s.availableTimes.map(t => TIME[t] ?? t).join(', ') : '';
+      return [
+        {
+          title: 'Thông tin cá nhân',
+          fields: [
+            ['Họ tên', s.fullName, E('fullName', 'text')],
+            ['Khoá học', s.courseType === 'nhat' ? '🇯🇵 Tiếng Nhật' : '🇰🇷 Tiếng Hàn', E('courseType', 'select', [['nhat','🇯🇵 Tiếng Nhật'],['han','🇰🇷 Tiếng Hàn']])],
+            ['Ngày sinh', fmtDate(s.dateOfBirth)],
+            ['Giới tính', { male: 'Nam', female: 'Nữ', other: 'Khác', undisclosed: 'Không tiết lộ' }[s.gender] ?? '—'],
+            ['SĐT', s.phone, E('phone', 'text')],
+            ['Email', s.email, E('email', 'text')],
+            ['Tỉnh/TP', s.province, E('province', 'text')],
+            ['Nghề nghiệp', s.occupation, E('occupation', 'text')],
+          ],
+        },
+        {
+          title: 'Thông tin học tập',
+          fields: [
+            ['Trình độ hiện tại', LEVEL[s.koreanJapaneseLevel] ?? '—'],
+            ['Mục tiêu học', goals],
+            ['Mục tiêu khác', s.learningGoalOther],
+            ['Hình thức học', { online: 'Online', offline: 'Offline', both: 'Đều được' }[s.studyMode] ?? '—'],
+            ['Thiết bị', { computer: 'Máy tính', phone: 'Điện thoại', both: 'Cả hai', none: 'Chưa có' }[s.device] ?? '—'],
+            ['Khung giờ học', times],
+          ],
+        },
+        {
+          title: 'Quản lý',
+          fields: [
+            ['Trạng thái', s.status, E('status', 'select', [['new','🆕 Mới'],['contacted','📞 Đã liên hệ'],['enrolled','✅ Đã nhập học'],['rejected','❌ Không học']])],
+            ['Nguồn', { form: '📝 Form', manual: '👤 Tạo tay', telegram: '🤖 Telegram' }[s.source] ?? s.source],
+            ['Biết đến qua', { facebook: 'Facebook', tiktok: 'TikTok', website: 'Website', referral: 'Bạn bè', zalo: 'Zalo', other: 'Khác' }[s.referralSource] ?? '—'],
+            ['Ngày đăng ký', fmtDate(s.createdAt)],
+          ],
+        },
+        ...(s.expectation ? [{ title: 'Mong muốn từ khoá học', wide: true, fields: [['', s.expectation, { pre: true }]] }] : []),
+        ...(s.note ? [{ title: 'Ghi chú', wide: true, fields: [['', s.note, { pre: true, edit: { key: 'note', type: 'textarea' } }]] }] : []),
+      ];
+    },
+  },
+
   'blog-posts': {
     title: 'Blog nội bộ',
     subtitle: 'Bài viết, chia sẻ, thông báo — phân theo phòng ban',
@@ -555,8 +619,8 @@ export const PAGES = {
   },
 
   offices: {
-    title: 'Văn phòng',
-    subtitle: 'Chi nhánh / văn phòng TLG — LĐ chọn trong form đăng ký',
+    title: 'Chi nhánh',
+    subtitle: 'Chi nhánh / chi nhánh TLG — LĐ chọn trong form đăng ký',
     collection: 'offices',
     sort: 'name',
     columns: [

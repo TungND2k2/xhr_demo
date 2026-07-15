@@ -7,7 +7,7 @@ import {
   LayoutDashboard, Users as UsersIcon, BarChart3, Settings, Sun, Moon, Search,
   FileText, Briefcase, Building2, Inbox, Calendar, Mail, Bot, MessageSquare, Users2,
   Boxes, Folder, ClipboardList, Plus, Shield, LogOut, Command, ArrowRight, X as XIcon,
-  Newspaper,
+  Newspaper, GraduationCap,
 } from 'lucide-react';
 
 import Dashboard from './pages/Dashboard';
@@ -26,6 +26,9 @@ import ProfilePage from './pages/ProfilePage';
 import BlogListPage from './pages/BlogListPage';
 import BlogDetailPage from './pages/BlogDetailPage';
 import BlogEditorPage from './pages/BlogEditorPage';
+import OfficesDetailPage from './pages/OfficesDetailPage';
+import StudentsPage from './pages/StudentsPage';
+import StudentRegisterPage from './pages/StudentRegisterPage';
 import useAuth from './hooks/useAuth';
 import PrintableFormDetail from './pages/PrintableFormDetail';
 import WorkerHSNForm from './pages/WorkerHSNForm';
@@ -97,6 +100,7 @@ const NAV_GROUPS = [
     label: 'Nghiệp vụ XKLĐ',
     items: [
       { path: '/workers', icon: UsersIcon, label: 'Lao động' },
+      { path: '/students', icon: GraduationCap, label: 'Học viên' },
       { path: '/orders', icon: FileText, label: 'Đơn tuyển' },
       { path: '/supply-contracts', icon: Briefcase, label: 'HĐ Cung ứng' },
       { path: '/contracts', icon: Briefcase, label: 'HĐ Lao động' },
@@ -109,7 +113,7 @@ const NAV_GROUPS = [
       { path: '/official-documents', icon: Inbox, label: 'Công văn' },
       { path: '/employees', icon: Users2, label: 'Nhân sự nội bộ' },
       { path: '/assets', icon: Boxes, label: 'Tài sản' },
-      { path: '/offices', icon: Building2, label: 'Văn phòng' },
+      { path: '/offices', icon: Building2, label: 'Chi nhánh' },
       { path: '/calendars', icon: Calendar, label: 'Lịch họp' },
       { path: '/reminders', icon: ClipboardList, label: 'Nhắc việc' },
       { path: '/forms', icon: FileText, label: 'Form / Lời mời' },
@@ -321,6 +325,13 @@ function RoleDetailRoute() {
   return <RoleDetailPage recordId={id} onBack={() => navigate('/roles')} />;
 }
 
+// Office detail — hero + edit inline + toggle active
+function OfficesDetailRoute() {
+  const { id } = useParams();
+  const navigate = useNavigate();
+  return <OfficesDetailPage recordId={id} onBack={() => navigate('/offices')} />;
+}
+
 // Blog detail — view + edit markdown content
 function BlogDetailRoute() {
   const { id } = useParams();
@@ -483,6 +494,66 @@ function EmployeesListRoute() {
   );
 }
 
+// Chi nhánh (offices) list — SimpleListPage + nút Tạo + FormModal
+const OFFICE_COUNTRIES = [
+  { value: 'vn', label: '🇻🇳 Việt Nam' },
+  { value: 'jp', label: '🇯🇵 Nhật Bản' },
+  { value: 'kr', label: '🇰🇷 Hàn Quốc' },
+  { value: 'tw', label: '🇹🇼 Đài Loan' },
+  { value: 'de', label: '🇩🇪 Đức' },
+  { value: 'qa', label: '🇶🇦 Qatar' },
+  { value: 'other', label: 'Khác' },
+];
+const OFFICE_CREATE_FIELDS = [
+  { name: 'officeCode', label: 'Mã chi nhánh', type: 'text', required: true, width: 'third', placeholder: 'HN / ND / TPHCM' },
+  { name: 'name', label: 'Tên chi nhánh', type: 'text', required: true, width: 'full', placeholder: 'vd: Chi nhánh Hà Nội' },
+  { name: 'country', label: 'Quốc gia', type: 'select', required: true, width: 'half', defaultValue: 'vn', options: OFFICE_COUNTRIES },
+  { name: 'phone', label: 'SĐT', type: 'text', width: 'half' },
+  { name: 'address', label: 'Địa chỉ', type: 'textarea', width: 'full', rows: 2 },
+  { name: 'email', label: 'Email', type: 'text', width: 'full' },
+];
+
+function OfficesListRoute() {
+  const navigate = useNavigate();
+  const cfg = PAGES.offices;
+  const [open, setOpen] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
+
+  const handleCreate = async (payload) => {
+    const doc = await createDoc('offices', { ...payload, active: true });
+    setReloadKey((k) => k + 1);
+    if (doc?.id) navigate(`/offices/${doc.id}`);
+  };
+
+  if (!cfg) return <NotFound />;
+  return (
+    <>
+      <SimpleListPage
+        {...cfg}
+        onSelect={(id) => navigate(`/offices/${id}`)}
+        reloadKey={reloadKey}
+        headerActions={
+          <button
+            onClick={() => setOpen(true)}
+            className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-xl bg-blue-500 hover:bg-blue-600 text-white transition-all"
+          >
+            <Plus size={14} /> Thêm chi nhánh
+          </button>
+        }
+      />
+      <FormModal
+        open={open}
+        onClose={() => setOpen(false)}
+        title="Thêm chi nhánh mới"
+        subtitle="Mã + Tên + Quốc gia là bắt buộc. LĐ sẽ thấy chi nhánh này trong form đăng ký."
+        fields={OFFICE_CREATE_FIELDS}
+        submitLabel="Tạo chi nhánh"
+        onSubmit={handleCreate}
+      />
+    </>
+  );
+}
+
 // Route wrapper cho list 1 collection
 function CollectionListRoute({ tab }) {
   const navigate = useNavigate();
@@ -559,6 +630,10 @@ function ProtectedRoutes() {
         <Route path="/calendars" element={<CalendarView />} />
         <Route path="/calendars/:id" element={<CollectionDetailRoute tab="calendars" />} />
         <Route path="/employees" element={<EmployeesListRoute />} />
+        <Route path="/offices" element={<OfficesListRoute />} />
+        <Route path="/offices/:id" element={<OfficesDetailRoute />} />
+        <Route path="/students" element={<StudentsPage />} />
+        <Route path="/students/:id" element={<CollectionDetailRoute tab="students" />} />
         <Route path="/employees/:id" element={<EmployeeDetailRoute />} />
         <Route path="/official-documents" element={<OfficialDocumentsPage />} />
         <Route path="/official-documents/:id" element={<OfficialDocumentRoute />} />
@@ -571,7 +646,7 @@ function ProtectedRoutes() {
 
         <Route path="/roles/:id" element={<RoleDetailRoute />} />
 
-        {Object.keys(PAGES).filter((t) => t !== 'workers' && t !== 'calendars' && t !== 'media' && t !== 'assets' && t !== 'employees' && t !== 'roles' && t !== 'users' && t !== 'official-documents').map((tab) => (
+        {Object.keys(PAGES).filter((t) => t !== 'workers' && t !== 'calendars' && t !== 'media' && t !== 'assets' && t !== 'employees' && t !== 'roles' && t !== 'users' && t !== 'official-documents' && t !== 'offices' && t !== 'students').map((tab) => (
           <React.Fragment key={tab}>
             <Route path={`/${tab}`} element={<CollectionListRoute tab={tab} />} />
             <Route path={`/${tab}/:id`} element={<CollectionDetailRoute tab={tab} />} />
@@ -602,6 +677,7 @@ export default function App() {
       <Routes>
         <Route path="/login" element={<LoginPage />} />
         <Route path="/forms/:token" element={<PublicFormPage />} />
+        <Route path="/dang-ky-hoc-vien" element={<StudentRegisterPage />} />
         <Route path="/*" element={<ProtectedRoutes />} />
       </Routes>
     </BrowserRouter>
@@ -620,7 +696,7 @@ const SPOTLIGHT_LINKS = [
   { label: 'Công văn',  path: '/official-documents', icon: Inbox,    category: 'Hành chính' },
   { label: 'Nhân sự nội bộ', path: '/employees', icon: Users2,       category: 'Hành chính' },
   { label: 'Tài sản',   path: '/assets',      icon: Boxes,           category: 'Hành chính' },
-  { label: 'Văn phòng', path: '/offices',     icon: Building2,       category: 'Hành chính' },
+  { label: 'Chi nhánh', path: '/offices',     icon: Building2,       category: 'Hành chính' },
   { label: 'Lịch họp',  path: '/calendars',   icon: Calendar,        category: 'Hành chính' },
   { label: 'Nhắc việc', path: '/reminders',   icon: ClipboardList,   category: 'Hành chính' },
   { label: 'Form / Lời mời', path: '/forms',  icon: Mail,            category: 'Hành chính' },

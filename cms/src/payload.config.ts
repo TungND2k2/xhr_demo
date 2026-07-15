@@ -30,6 +30,7 @@ import { Partners } from "./collections/Partners";
 import { Offices } from "./collections/Offices";
 import { Roles } from "./collections/Roles";
 import { BlogPosts } from "./collections/BlogPosts";
+import { Students } from "./collections/Students";
 import { SupplyContracts } from "./collections/SupplyContracts";
 import { Employees } from "./collections/Employees";
 import { FormInvites } from "./collections/FormInvites";
@@ -84,6 +85,7 @@ export default buildConfig({
     Partners,
     Offices,
     BlogPosts,
+    Students,
     SupplyContracts,
     Employees,
     FormInvites,
